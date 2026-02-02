@@ -151,5 +151,12 @@ class SpiceManager:
             except:
                 raise RuntimeError(f"Could not find constant {constant_name} for {body}: {e}")
 
+    def get_radii(self, body: str) -> np.ndarray:
+        """
+        Convenience wrapper to get planetary radii.
+        Returns [R_equatorial, R_equatorial, R_polar] typically.
+        """
+        return self.get_body_constant(body, "RADII")
+
 # Global accessibility
 spice_manager = SpiceManager()
