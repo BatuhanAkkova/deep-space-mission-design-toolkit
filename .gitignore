@@ -1,0 +1,7 @@
+.pytest_cache
+__pycache__
+data/
+.agent
+mission_design_conventions.md
+flyby.md
+roadmap.md
