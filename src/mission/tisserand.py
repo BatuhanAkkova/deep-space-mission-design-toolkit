@@ -7,6 +7,7 @@ class TisserandGraph:
     Class to generate Tisserand Graphs for gravity assist sequence planning.
     Plots Orbital Period (or Energy) vs Perihelion Radius.
     Draws contours of constant V_inf relative to flyby bodies.
+    Supports drawing orbital resonance lines (e.g., 2:3 Earth Resonance).
     """
     def __init__(self, mu_sun: float = None):
         """
@@ -135,21 +136,21 @@ class TisserandGraph:
         valid_mask = valid_mask & (rp_km <= a_sc + tol)
         
         inner_term = (rp_km / R_pl) * (2.0 - rp_km / a_sc)
-        inner_term = np.maximum(inner_term, 0) 
+        inner_term = np.maximum(inner_term, 0.0) 
         term_2 = 2.0 * np.sqrt(inner_term)
         
         val = 3.0 - term_1 - term_2
-        # If val < 0, set to 0 (or nan)
         
         v_inf_sq = V_pl**2 * val
         
         # apply mask
-        v_inf = np.sqrt(v_inf_sq, where=(valid_mask & (v_inf_sq >= 0)), out=np.full_like(v_inf_sq, np.nan))
+        v_inf = np.sqrt(np.maximum(v_inf_sq, 0.0), where=(valid_mask & (v_inf_sq > -1.0)), out=np.full_like(v_inf_sq, np.nan))
         
         return v_inf
 
     def plot_graph(self, period_range: tuple, rp_range: tuple, 
-                  v_inf_contours: dict = None, 
+                  v_inf_contours: dict = None,
+                  resonance_lines: dict = None, 
                   filename: str = None,
                   show: bool = True):
         """
@@ -159,6 +160,8 @@ class TisserandGraph:
             period_range (tuple): (min, max) Period in Days.
             rp_range (tuple): (min, max) Perihelion Radius in AU.
             v_inf_contours (dict): definition of contours. {BodyName: [level1, level2, ...]}
+            resonance_lines (dict): definition of resonances. {BodyName: [(num, den), ...]}
+                                    e.g. {'EARTH': [(1,1), (2,3)]} means Earth 1:1 and 2:3.
             filename (str): Output filename.
         """
         
@@ -166,13 +169,14 @@ class TisserandGraph:
         p_min, p_max = period_range
         rp_min, rp_max = rp_range
         
-        P_grid, Rp_grid = np.meshgrid(np.linspace(p_min, p_max, 200), np.linspace(rp_min, rp_max, 200))
+        P_grid, Rp_grid = np.meshgrid(np.linspace(p_min, p_max, 300), np.linspace(rp_min, rp_max, 300))
         
-        fig, ax = plt.subplots(figsize=(12, 8))
+        fig, ax = plt.subplots(figsize=(12, 9))
         
         colors = ['blue', 'green', 'red', 'orange', 'purple']
         c_idx = 0
         
+        # 1. Plot V_inf contours
         if v_inf_contours:
             for body_name, levels in v_inf_contours.items():
                 if body_name not in self.bodies:
@@ -192,20 +196,47 @@ class TisserandGraph:
                 b_p = self.bodies[body_name]['P'] / 86400.0 # days
                 b_rp = self.bodies[body_name]['a'] / 1.495978707e8 # AU
                 
-                ax.plot(b_p, b_rp, 'o', color=color, label=f'{body_name} Orbit')
+                ax.plot(b_p, b_rp, 'o', color=color, markersize=8, label=f'{body_name} Orbit', markeredgecolor='black')
+        
+        # 2. Plot Resonance Lines
+        # A resonance m:n means m spacecraft periods = n planet periods.
+        # T_sc = (n/m) * T_planet
+        # This is a horizontal line on the Period plot.
+        if resonance_lines:
+            for body_name, ratios in resonance_lines.items():
+                if body_name not in self.bodies:
+                    continue
+                
+                body = self.bodies[body_name]
+                T_pl = body['P'] / 86400.0 # days
+                
+                for (m, n) in ratios:
+                    # Spacecraft Period
+                    T_sc = (float(n) / float(m)) * T_pl
+                    
+                    if p_min <= T_sc <= p_max:
+                        ax.hlines(y=T_sc, xmin=rp_min, xmax=rp_max, colors='gray', linestyles=':', alpha=0.5)                        
+                        ax.vlines(x=T_sc, ymin=rp_min, ymax=rp_max, colors='gray', linestyles=':', alpha=0.5)
+                        
+                        # Label
+                        label_y = rp_max - (rp_max - rp_min) * 0.05
+                        ax.text(T_sc, label_y, f"{body_name} {m}:{n}", rotation=90, verticalalignment='top', fontsize=8, color='gray')
 
-        ax.set_xlabel('Orbital Period [Days]')
-        ax.set_ylabel('Perihelion Radius [AU]')
-        ax.set_title('Tisserand Graph (Energy vs Shape)')
+
+        ax.set_xlabel('Orbital Period [Days]', fontsize=12)
+        ax.set_ylabel('Perihelion Radius [AU]', fontsize=12)
+        ax.set_title('Tisserand Graph (Energy vs Shape)', fontsize=14)
         ax.grid(True, which='both', linestyle='--', alpha=0.5)
-        ax.legend()
+        ax.legend(loc='lower right')
         
         # Fix Limits
         ax.set_xlim(p_min, p_max)
         ax.set_ylim(rp_min, rp_max)
         
+        plt.tight_layout()
+        
         if filename:
-            plt.savefig(filename)
+            plt.savefig(filename, dpi=300)
             print(f"Saved Tisserand Graph to {filename}")
             
         if show:

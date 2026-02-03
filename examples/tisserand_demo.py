@@ -13,9 +13,9 @@ from src.spice.manager import spice_manager
 def main():
     print("Generating Tisserand Graph...")
     
-    # Initialize Manager (Optional, TisserandGraph handles constants if SPICE fails, but we want SPICE if possible)
+    # Initialize Manager
     try:
-        spice_manager.load_standard_kernels('data') # path relative to run location usually
+        spice_manager.load_standard_kernels('data') 
     except:
         print("Warning: Could not load SPICE kernels. Using default constants.")
 
@@ -23,7 +23,6 @@ def main():
     tg = TisserandGraph()
     
     # Add Bodies
-    # Using explicit values for clarity and robustness in this demo
     AU = 1.495978707e8 # km
     
     # Earth
@@ -35,27 +34,33 @@ def main():
     # Jupiter
     tg.add_body("JUPITER", a_km=5.203*AU)
     
-    # Define Contours
-    # V_inf in km/s
+    # Define V_inf Contours (km/s)
     contours = {
         'EARTH': [3.0, 5.0, 7.0, 9.0],
-        'VENUS': [3.0, 5.0, 7.0],
+        'VENUS': [3.0, 4.0, 6.0],
         'MARS': [3.0, 5.0, 7.0],
-        'JUPITER': [5.0, 7.0, 9.0, 12.0]
+        'JUPITER': [6.0, 7.0, 9.0]
+    }
+    
+    # Define Resonances
+    # (m:n) -> m spacecraft orbits = n planet orbits
+    # T_sc / T_pl = n / m
+    resonances = {
+        'EARTH': [(1, 1), (2, 1), (3, 2), (2, 3)],  # 1:1, 2:1 (2 year), 3:2, 2:3
+        'JUPITER': [(2, 5), (1, 2)]
     }
     
     # Define Plot Range
-    # Period: 0.5 Years to 12 Years (to reach Jupiter) -> 180 days to 4500 days
-    # Rp: 0.5 AU to 6.0 AU
-    
-    p_range = (100, 5000) # Days
-    rp_range = (0.4, 6.0) # AU
+    # Period: 100 days to 13 years (~4800 days)
+    p_range = (100, 4800) # Days
+    rp_range = (0.5, 5.5) # AU
     
     output_file = 'tisserand_plot_demo.png'
     
     # Plot
     tg.plot_graph(p_range, rp_range, 
                   v_inf_contours=contours, 
+                  resonance_lines=resonances,
                   filename=output_file)
                   
     print(f"Done. Check {output_file}")

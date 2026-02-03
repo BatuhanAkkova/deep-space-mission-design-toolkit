@@ -1,14 +1,22 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from datetime import datetime, timedelta
 from src.spice.manager import spice_manager
 from src.trajectory.lambert import LambertSolver
-from src.mission.departure import calculate_departure_asymptotes
 
 class PorkchopPlotter:
     """
     Generates Porkchop plots for interplanetary transfers.
+    Calculates departure C3, arrival V_inf, and Time of Flight (TOF) for a grid of launch and arrival dates.
     """
     def __init__(self, departure_body: str, arrival_body: str, frame: str = 'ECLIPJ2000'):
+        """
+        Args:
+            departure_body (str): Check SPICE name (e.g., 'EARTH BARYCENTER').
+            arrival_body (str): Check SPICE name (e.g., 'MARS BARYCENTER').
+            frame (str): Reference frame (default 'ECLIPJ2000').
+        """
         self.dep_body = departure_body
         self.arr_body = arrival_body
         self.frame = frame
@@ -27,8 +35,8 @@ class PorkchopPlotter:
                 'c3': 2D array [km^2/s^2],
                 'v_inf_arr': 2D array [km/s],
                 'tof_days': 2D array [days],
-                'launch_grid': meshgrid of launch dates,
-                'arrival_grid': meshgrid of arrival dates
+                'launch_dates': input array,
+                'arrival_dates': input array
             }
         """
         n_launch = len(launch_dates)
@@ -38,6 +46,9 @@ class PorkchopPlotter:
         v_inf_arr_grid = np.full((n_arrival, n_launch), np.nan)
         tof_grid = np.full((n_arrival, n_launch), np.nan)
         
+        print(f"Generating Porkchop data for {n_launch}x{n_arrival} grid...")
+        
+        # Pre-fetch states to avoid repeated SPICE calls
         dep_states = {}
         for t in launch_dates:
             try:
@@ -52,21 +63,22 @@ class PorkchopPlotter:
             except:
                 arr_states[t] = None
         
-        # Grid loop
-        # We iterate through launch dates (columns) and arrival dates (rows)
+        # Loop through grid
         for i, t_arr in enumerate(arrival_dates):
             r_arr_state = arr_states[t_arr]
             if r_arr_state is None: continue
+            
             r2 = r_arr_state[0:3]
             v2_planet = r_arr_state[3:6]
             
             for j, t_launch in enumerate(launch_dates):
                 if t_arr <= t_launch:
-                    continue
+                    continue # Arrival must be after launch
                     
                 dt = t_arr - t_launch
                 r_dep_state = dep_states[t_launch]
                 if r_dep_state is None: continue
+                
                 r1 = r_dep_state[0:3]
                 v1_planet = r_dep_state[3:6]
                 
@@ -101,9 +113,15 @@ class PorkchopPlotter:
             'arrival_dates': arrival_dates
         }
 
-    def plot(self, data: dict, max_c3: float = 50.0, filename: str = None):
+    def plot(self, data: dict, max_c3: float = 50.0, max_vinf: float = 10.0, filename: str = None):
         """
         Plots the Porkchop plot.
+        
+        Args:
+            data (dict): Result from generate_data.
+            max_c3 (float): Max C3 to plot contours for [km^2/s^2].
+            max_vinf (float): Max V_inf at arrival to plot contours for [km/s].
+            filename (str): If provided, save to file.
         """
         launch_dates = data['launch_dates']
         arrival_dates = data['arrival_dates']
@@ -111,27 +129,63 @@ class PorkchopPlotter:
         v_inf = data['v_inf_arr']
         tof = data['tof_days']
         
-        l_days = (launch_dates - launch_dates[0]) / 86400.0
-        a_days = (arrival_dates - launch_dates[0]) / 86400.0
+        # Convert ET to Python Datetime objects for plotting
+        l_dates_dt = [spice_manager.et2datetime(et) for et in launch_dates]
+        a_dates_dt = [spice_manager.et2datetime(et) for et in arrival_dates]
         
-        X, Y = np.meshgrid(l_days, a_days)
+        # Format dates for matplotlib
+        l_num = mdates.date2num(l_dates_dt)
+        a_num = mdates.date2num(a_dates_dt)
         
-        fig, ax = plt.subplots(figsize=(10, 8))
+        X, Y = np.meshgrid(l_num, a_num)
         
-        # C3 Contours
-        levels = np.linspace(0, max_c3, 20)
-        cs = ax.contour(X, Y, c3, levels=levels, colors='blue', linewidths=0.5)
-        ax.clabel(cs, inline=1, fontsize=8, fmt='C3=%1.1f')
+        fig, ax = plt.subplots(figsize=(12, 10))
         
-        # TOF Contours
-        cs_tof = ax.contour(X, Y, tof, colors='red', linestyles='dashed', linewidths=0.5)
-        ax.clabel(cs_tof, inline=1, fontsize=8, fmt='%d days')
+        # 1. C3 Contours (Departure Energy) - Solid Lines
+        levels_c3 = np.linspace(0, max_c3, 20)
+        # Add specific low levels for detail
+        if np.nanmin(c3) < 15:
+            levels_c3 = np.sort(np.unique(np.concatenate((levels_c3, [10, 12, 15, 20]))))
+            
+        cs = ax.contour(X, Y, c3, levels=levels_c3, colors='blue', linewidths=1.0)
+        ax.clabel(cs, inline=1, fontsize=9, fmt=r'$C_3$=%1.1f')
         
-        ax.set_title(f"Porkchop Plot: {self.dep_body} to {self.arr_body}")
-        ax.set_xlabel(f"Days since Launch Window Open (Epoch {launch_dates[0]})")
-        ax.set_ylabel(f"Days since Launch Window Open (Arrival)")
+        # 2. TOF Contours (Time of Flight) - Dashed Gray
+        cs_tof = ax.contour(X, Y, tof, colors='gray', linestyles='dashed', linewidths=0.8, alpha=0.7)
+        ax.clabel(cs_tof, inline=1, fontsize=8, fmt='%d d')
+        
+        # 3. Arrival V_inf - Dotted Red (Optional or primary?)
+        # Let's add them as thin red lines
+        levels_vinf = np.linspace(0, max_vinf, 10)
+        cs_vinf = ax.contour(X, Y, v_inf, levels=levels_vinf, colors='red', linestyles='dotted', linewidths=1.0)
+        ax.clabel(cs_vinf, inline=1, fontsize=8, fmt=r'$V_{\infty}$=%1.1f')
+
+        # Formatting
+        ax.set_title(f"Porkchop Plot: {self.dep_body} to {self.arr_body}", fontsize=14)
+        ax.set_xlabel("Launch Date (UTC)", fontsize=12)
+        ax.set_ylabel("Arrival Date (UTC)", fontsize=12)
+        
+        # Date formatting on axes
+        ax.xaxis.set_major_locator(mdates.MonthLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+        ax.yaxis.set_major_locator(mdates.MonthLocator())
+        ax.yaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+        
+        plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
+        
+        # Add simple legend
+        from matplotlib.lines import Line2D
+        custom_lines = [Line2D([0], [0], color='blue', lw=2),
+                        Line2D([0], [0], color='gray', lw=2, linestyle='--'),
+                        Line2D([0], [0], color='red', lw=2, linestyle=':')]
+        ax.legend(custom_lines, [r'Departure $C_3$ ($km^2/s^2$)', 'Time of Flight (days)', r'Arrival $V_{\infty}$ (km/s)'])
+        
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
         
         if filename:
-            plt.savefig(filename)
+            plt.savefig(filename, dpi=300)
+            print(f"Plot saved to {filename}")
             plt.close()
         return fig
+

@@ -113,7 +113,30 @@ class SpiceManager:
         """
         Get the gravitational parameter (GM) for a body.
         """
-        return self.get_body_constant(body, "GM")
+        # Return scalar
+        vals = self.get_body_constant(body, "GM")
+        return vals[0]
+
+    def get_radii(self, body: str) -> np.ndarray:
+        """
+        Get variable radii of the body.
+        Result is [R_main_eq, R_ortho_eq, R_polar] usually.
+        """
+        return self.get_body_constant(body, "RADII", 3)
+
+    def et2datetime(self, et: float):
+        """
+        Converts ET to Python datetime.datetime object.
+        """
+        import datetime
+        # Get ISOC format: YYYY-MM-DDTHH:MM:SS.sss
+        s = self.et2utc(et, "ISOC", 3)
+        # Parse manually or check if 'Z' is at end
+        # Example format: 2005-01-01T12:00:00.000
+        # If no Z, assume it matches.
+        if s.endswith('Z'):
+            s = s[:-1]
+        return datetime.datetime.fromisoformat(s)
 
 # Global accessibility
 spice_manager = SpiceManager()
