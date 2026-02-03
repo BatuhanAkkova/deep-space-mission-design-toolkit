@@ -17,8 +17,6 @@ class TestPerturbations:
         np.testing.assert_allclose(R, np.eye(3), atol=1e-10)
         
         # Test J2000 to ECLIPJ2000 (Non-Identity roughly)
-        # Actually they are close but defined.
-        # Just check it returns valid 3x3 matrix
         R2 = spice_manager.get_coord_transform("J2000", "ECLIPJ2000", et)
         assert R2.shape == (3, 3)
         assert np.abs(np.linalg.det(R2) - 1.0) < 1e-10 # Determinant 1
@@ -41,11 +39,6 @@ class TestPerturbations:
         
         acc = j2_pert.compute_acceleration(t, r_sc)
         assert np.linalg.norm(acc) > 0
-        
-        # J2 acceleration is roughly -1.5 * J2 * (mu/r^2) * (Re/r)^2 ...
-        # Just ensure it runs and produces reasonable output order of magnitude
-        # J2 ~ 1e-3, mu ~ 4e5, r ~ 7e3 -> a_point ~ 4e5/49e6 ~ 0.008
-        # a_j2 ~ 1e-3 * 0.008 ~ 1e-5 km/s^2
         assert 1e-7 < np.linalg.norm(acc) < 1e-3
 
     def test_srp_acceleration(self):
@@ -75,7 +68,7 @@ class TestPerturbations:
                                  perturbations=[J2Perturbation('EARTH')])
         
         t_span = (0, 1000)
-        state0 = np.array([7000.0, 0.0, 0.0, 0.0, 7.5, 0.0]) # LEO-ish
+        state0 = np.array([7000.0, 0.0, 0.0, 0.0, 7.5, 0.0]) # LEO
         
         sol = dynamics.propagate(state0, t_span)
         assert sol.status == 0
@@ -83,7 +76,6 @@ class TestPerturbations:
 
     def test_stm_integration_with_j2_no_partials(self):
         # Currently J2 partials are zero, so STM should just propagate but not reflect J2 variations perfectly
-        # But code should run.
         dynamics = NBodyDynamics(['EARTH'], 'ECLIPJ2000', 'EARTH', 
                                  perturbations=[J2Perturbation('EARTH', 'ECLIPJ2000', 'IAU_EARTH')])
         

@@ -44,51 +44,52 @@ def test_lambert_180_failure_case():
     r2 = np.array([-1.0, 0.0, 0.0]) # 180 degrees away
     dt = np.pi # Half period for circular orbit r=1
     
-    # Our simple implementation handles A=0 by raising or failing in Newton.
-    # The helper `solve` calculates A = sin(dnu) * ...
-    # if dnu = pi, sin(dnu) = 0, A = 0.
-    
     with pytest.raises(Exception):
-        # Depending on how robust we made it, it might fail or raise.
-        # Current code raises standard python errors if standard newton fails
         LambertSolver.solve(r1, r2, dt, mu)
 
 def test_lambert_elliptical():
     """
     Test a known elliptical transfer.
+    We solve for v1, v2 and then propagate from r1 with v1 for dt seconds.
+    The resulting position should match r2.
     """
-    # Simply verify that propagation with v1 leads to r2 after dt
-    # This is a self-consistency check.
+    from src.dynamics.nbody import NBodyDynamics
     
-    # Random-ish inputs
-    mu = 3.986004418e5 # Earth
+    # Earth centered problem
+    mu = 3.986004418e5 
     r1 = np.array([7000.0, 0.0, 0.0])
-    r2 = np.array([0.0, 8000.0, 2000.0]) # some point
+    r2 = np.array([0.0, 8000.0, 2000.0])
     dt = 2000.0 # seconds
     
+    # Solve Lambert
     v1, v2 = LambertSolver.solve(r1, r2, dt, mu, prograde=True)
     
-    # Naive propagation check (Keplerian)
-    # Since we don't have a Keystone propagator in the test context easily,
-    # let's rely on the solver output consistency.
-    # Or implement a tiny propagator here (Euler/RK4) just to check magnitude?
-    # No, integrate with r1, v1 for dt and check r_final
+    # Propagate to verify
+    # Using NBodyDynamics with only EARTH to simulate two-body motion
+    # We need to mock spice_manager.get_mu('EARTH') or similar if kernels aren't loaded,
+    # but since NBodyDynamics loads standard kernels, we should be fine if they exist.
+    dyn = NBodyDynamics(bodies=['EARTH'], central_body='EARTH')
     
-    # We can trust the solver logic if it converges, 
-    # but let's check constraints:
-    # E = v^2/2 - mu/r
-    E1 = 0.5 * np.linalg.norm(v1)**2 - mu / np.linalg.norm(r1)
-    # Check if we reach r2?
-    pass
+    # Override mu to be exactly what we used in Lambert for consistency
+    dyn.mus['EARTH'] = mu
     
-    # Better: Use the solver output to re-derive dt or r2 if we had the inverse function.
-    pass
+    initial_state = np.concatenate((r1, v1))
+    sol = dyn.propagate(initial_state, (0, dt), rtol=1e-10, atol=1e-12)
+    
+    final_state_sim = sol.y[:, -1]
+    r2_sim = final_state_sim[0:3]
+    v2_sim = final_state_sim[3:6]
+    
+    # Assertions
+    np.testing.assert_allclose(r2_sim, r2, rtol=1e-5, atol=1e-5, err_msg="Propagated position does not match r2")
+    np.testing.assert_allclose(v2_sim, v2, rtol=1e-5, atol=1e-5, err_msg="Propagated velocity does not match v2")
+    
+    # Physical Sanity: Conservation of Energy
+    eps1 = 0.5 * np.linalg.norm(v1)**2 - mu / np.linalg.norm(r1)
+    eps2 = 0.5 * np.linalg.norm(v2)**2 - mu / np.linalg.norm(r2)
+    assert np.isclose(eps1, eps2, rtol=1e-8), "Energy not conserved in Lambert solution"
 
 if __name__ == "__main__":
-    test_lambert_circular_earth()
-    test_lambert_circular_earth() # intended?
-    # test_lambert_180_failure_case() # This raises, handle it
-    print("Running tests manual check...")
     try:
         test_lambert_circular_earth()
         print("test_lambert_circular_earth PASSED")
@@ -99,10 +100,6 @@ if __name__ == "__main__":
         test_lambert_180_failure_case()
         print("test_lambert_180_failure_case PASSED (Exception raised as expected)")
     except Exception as e:
-        # We expect it to pass if it handles the 'raises' internally or we catch it here?
-        # The test function uses pytest.raises context manager. 
-        # Calling it directly without pytest context might fail if not careful.
-        # But `pytest.raises` is a context manager. If we import pytest it works.
         print("test_lambert_180_failure_case PASSED (via pytest logic)")
         
     try:

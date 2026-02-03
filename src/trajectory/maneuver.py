@@ -8,8 +8,6 @@ class ManeuverError:
         """
         Args:
             magnitude_sigma (float): Standard deviation of magnitude error (relative, e.g. 0.01 for 1%).
-                                     Actually, usually defined as 1-sigma relative error or absolute?
-                                     Let's assume RELATIVE error (percentage/100).
             pointing_sigma (float): Standard deviation of pointing error [radians].
         """
         self.magnitude_sigma = magnitude_sigma
@@ -31,10 +29,6 @@ class ManeuverError:
         new_mag = mag + mag_error
         
         # Pointing Error
-        # Generate a random vector orthogonal to delta_v
-        # Rotate delta_v by pointing_sigma (approx)
-        # Actually random angle around the vector? No, deviation angle.
-        
         if self.pointing_sigma > 0:
             # Random deviation angle
             deviation = np.abs(np.random.normal(0, self.pointing_sigma))
@@ -100,8 +94,6 @@ class ImpulsiveManeuver:
         Returns:
             np.ndarray: Updated state vector.
         """
-        # Note: In a continuous propagation, this needs event detection.
-        # This function acts as an instantaneous jump.
         if abs(epoch - self.epoch) < 1e-6: # Tolerance check
             dv = self.get_delta_v(apply_errors)
             new_state = state.copy()

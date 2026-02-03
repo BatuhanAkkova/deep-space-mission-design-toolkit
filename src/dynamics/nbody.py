@@ -16,7 +16,6 @@ class NBodyDynamics:
             bodies (list[str]): List of SPICE body names exerting gravity (e.g., ['SUN', 'EARTH', 'JUPITER']).
             frame (str): Reference frame for the state vector (default: 'ECLIPJ2000').
             central_body (str): The body at the center of integration (usually 'SUN' or a planet for local operations).
-                                All states are integrated RELATIVE to this body.
             perturbations (list[Perturbation]): List of additional perturbations (J2, SRP, Aerodynamics).
         """
         self.bodies = bodies
@@ -25,11 +24,9 @@ class NBodyDynamics:
         self.perturbations = perturbations
         self.mus = {}
         
-        # Cache standard gravitational parameters
-        # We need the kernels loaded before this is called
         if not spice_manager._kernels_loaded:
-             # Try loading from default location if not loaded
-             spice_manager.load_standard_kernels()
+            # Try loading
+            spice_manager.load_standard_kernels()
 
         for body in bodies:
             try:
@@ -73,8 +70,6 @@ class NBodyDynamics:
             else:
                 # 3rd Body Gradient
                 # a_3rd = -mu * ( (r - r_b)/|r - r_b|^3 )  (Indirect term is constant wrt r)
-                # G = da_3rd/dr
-                # Let d = r - r_b
                 # G = -mu/d^3 * (I - 3*d*d^T/d^2)
                 try:
                     state_body = spice_manager.get_body_state(body, self.central_body, t, self.frame)
@@ -165,7 +160,7 @@ class NBodyDynamics:
             
             A = np.zeros((6, 6))
             A[0:3, 3:6] = np.eye(3) # Top right is Identity
-            A[3:6, 0:3] = G         # Bottom left is Gravity Gradient
+            A[3:6, 0:3] = G # Bottom left is Gravity Gradient
             
             # dPhi/dt = A * Phi
             dPhi = A @ Phi

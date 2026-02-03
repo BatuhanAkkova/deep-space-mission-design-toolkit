@@ -23,8 +23,6 @@ class MultipleShootingSolver(IndirectSolver):
             free_time: If True, optimizes for unknown parameters (assumed [tf]).
             events: Optional. List of callables, one per segment (or None).
                     If events[i] is provided, segment i integration stops at the event.
-                    The "end time" of this segment becomes variable.
-                    Note: If using events, the time grid structure changes.
         """
         if self._numeric_dynamics is None:
             raise RuntimeError("System not lambdified. Call derive_conditions() and lambdify_system() first.")
@@ -84,8 +82,6 @@ class MultipleShootingSolver(IndirectSolver):
                 # Setup events for solve_ivp
                 ivp_events = [event_i] if event_i else None
                 if ivp_events:
-                     # Helper to wrap event if needed (e.g. to ensure terminal=True)
-                     # But we assume user passes proper event function
                      if not hasattr(event_i, 'terminal'):
                          event_i.terminal = True
                      
@@ -99,9 +95,6 @@ class MultipleShootingSolver(IndirectSolver):
                 if event_i and sol.t_events and len(sol.t_events[0]) > 0:
                     # Stopped at event
                     y_end_integrated = sol.y_events[0][0]
-                    # t_event = sol.t_events[0][0]
-                    # Note: y_next_guess corresponds to state AT THE EVENT?
-                    # Yes. Standard MS matches state at node i+1 with integrated state from i.
                     pass
                 else:
                     # Reached t_end

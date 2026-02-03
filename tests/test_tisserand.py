@@ -15,20 +15,10 @@ class TestTisserandGraph:
         tg = TisserandGraph(mu_sun=1.0)
         tg.add_body("TEST_BODY", a_km=1.0)
         
-        # Period for a=1 is 2*pi
-        P = 2 * np.pi
-        rp = 1.0 # AU (or km in this unitless test)
-        
-        # Note: compute_vinf expects inputs in Days/AU usually? 
-        # Wait, compute_vinf takes Period (Days) and Rp (AU).
-        # And bodies are added with a_km (km).
-        # We need to be careful with units in the test or mock the constants.
-        
         # The class uses constants:
         AU_KM = 1.495978707e8
         DAY_SEC = 86400.0
         
-        # Let's use real units for the test to avoid messing with internal constants
         mu_sun = 1.327e11 # km^3/s^2 approx
         tg = TisserandGraph(mu_sun=mu_sun)
         
@@ -44,12 +34,6 @@ class TestTisserandGraph:
         P_sc_days = P_sc_sec / DAY_SEC
         rp_au = R_pl / AU_KM # close to 1
         
-        # We need to ensure unit consistency. 
-        # add_body takes a_km. 
-        # compute_vinf takes P_days and Rp_au.
-        # It converts P_days to seconds, calculates a from mu.
-        
-        # Let's input P_sc_days and rp_au corresponding exactly to R_pl
         v_inf = tg.compute_vinf(np.array([P_sc_days]), np.array([rp_au]), "PLANET")
         
         assert np.isclose(v_inf[0], 0.0, atol=1e-3)

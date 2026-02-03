@@ -55,8 +55,6 @@ class SpiceManager:
             et (float): Ephemeris Time (seconds past J2000)
             frame (str): Reference frame (default: 'ECLIPJ2000')
             
-            aberration_correction (str): 'NONE', 'LT', 'LT+S', etc.
-            None by default.
         Returns:
             numpy.ndarray: 6-element state vector [x, y, z, vx, vy, vz] in km and km/s
         """
@@ -110,12 +108,6 @@ class SpiceManager:
             return values
         except Exception as e:
             raise RuntimeError(f"Could not find constant {constant_name} for {body}: {e}")
-
-    def get_radii(self, body: str) -> np.ndarray:
-        """
-        Convenience wrapper to get planetary radii.
-        """
-        return self.get_body_constant(body, "RADII")
         
     def get_mu(self, body: str) -> float:
         """

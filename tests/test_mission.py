@@ -32,16 +32,49 @@ def test_state_to_coe():
     assert np.isclose(eles['i_deg'], 0.0)
 
 def test_porkchop_generator():
-    # Test generation runs without error on mock data
-    # We won't test full Lambert accuracy here (covered in lambert tests)
-    # Just interface
+    """
+    Tests the PorkchopPlotter data generation for a known launch window (Earth-Mars 2020).
+    """
     from src.mission.porkchop import PorkchopPlotter
-    from src.spice.manager import SpiceManager
-    SpiceManager().load_standard_kernels()
+    from src.spice.manager import spice_manager
     
-    plotter = PorkchopPlotter('EARTH', 'MARS')
+    # Load kernels (assuming data directory relative to project root)
+    spice_manager.load_standard_kernels('data')
     
-    # Mock spice manager to avoid loading kernels in unit test if possible
-    # But integration test is better.
-    # Let's trust integration test for real kernel loading.
-    pass
+    plotter = PorkchopPlotter('EARTH BARYCENTER', 'MARS BARYCENTER')
+    
+    # Earth-Mars 2020 (Perseverance Window)
+    # Launch: July-August 2020, Arrival: Feb 2021
+    l_start = spice_manager.utc2et("2020-07-01T00:00:00")
+    l_end = spice_manager.utc2et("2020-08-31T00:00:00")
+    a_start = spice_manager.utc2et("2021-01-01T00:00:00")
+    a_end = spice_manager.utc2et("2021-05-31T00:00:00")
+    
+    # Use a small grid for speed in unit tests
+    num_steps = 5
+    launch_dates = np.linspace(l_start, l_end, num_steps)
+    arrival_dates = np.linspace(a_start, a_end, num_steps)
+    
+    data = plotter.generate_data(launch_dates, arrival_dates)
+    
+    # Assertions on dictionary structure
+    assert 'c3' in data
+    assert 'v_inf_arr' in data
+    assert 'tof_days' in data
+    
+    # Assertions on data shapes
+    expected_shape = (num_steps, num_steps)
+    assert data['c3'].shape == expected_shape
+    
+    # Assert that we found valid transfer solutions (not all NaNs)
+    valid_c3 = data['c3'][~np.isnan(data['c3'])]
+    assert len(valid_c3) > 0, "No valid Lambert solutions found in the specified window."
+    
+    # Basic physical sanity checks
+    # Earth-Mars C3 should be reasonable (e.g., between 10 and 50 km^2/s^2 for this window)
+    min_c3 = np.nanmin(data['c3'])
+    assert 5.0 < min_c3 < 100.0, f"Minimum C3 {min_c3} is outside expected physical range."
+    
+    # TOF Should be around 200 days
+    avg_tof = np.nanmean(data['tof_days'])
+    assert 100 < avg_tof < 400, f"Average TOF {avg_tof} is outside expected range for Mars transfer."

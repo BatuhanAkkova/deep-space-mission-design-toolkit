@@ -56,7 +56,7 @@ class OptimalControlProblem:
     def add_constraint(self, kind: str, expression: sp.Expr):
         """
         Adds a boundary constraint.
-        kind: 'initial', 'final', or 'path' (path constraints might be handled via penalty/slack)
+        kind: 'initial', 'final', or 'path'
         expression: Symbolic expression that must equal 0.
         """
         if kind not in self.constraints:
@@ -73,8 +73,6 @@ class OptimalControlProblem:
             method: 'quadratic_penalty' is currently supported.
         """
         if method == 'quadratic_penalty':
-            # Add L2 penalty: 0.5 * weight * max(0, g)^2
-            # This is C1 continuous.
             penalty = 0.5 * penalty_weight * sp.Max(0, g)**2
             self.L += penalty
         else:
@@ -98,10 +96,6 @@ class OptimalControlProblem:
         """
         cost = 0
         for u in control_symbols:
-            # sqrt(u^2 + eps^2)
-            # define epsilon as a symbol if possible to vary it later?
-            # Or assume the user passes a symbol?
-            # Let's assume epsilon is a symbol or float.
             cost += weight * sp.sqrt(u**2 + epsilon**2)
         
         self.L = cost

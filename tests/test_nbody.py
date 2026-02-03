@@ -78,9 +78,4 @@ def test_perturbation_direction(mock_spice):
     nbody_unperturbed = NBodyDynamics(bodies=['SUN'], central_body='SUN')
     ds_unperturbed = nbody_unperturbed.equations_of_motion(0, state)
     
-    # The presence of Earth (between Sun and SC) should increase the Pull towards the origin (negative x)
-    # Earth is at 1.5e8, SC at 2.0e8. Earth pulls SC towards -x.
-    
-    # ds[3] is x-acceleration
-    # Both are negative (pull towards Sun). Perturbed should be MORE negative.
     assert ds_perturbed[3] < ds_unperturbed[3]

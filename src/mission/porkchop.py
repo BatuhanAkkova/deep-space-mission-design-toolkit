@@ -38,10 +38,6 @@ class PorkchopPlotter:
         v_inf_arr_grid = np.full((n_arrival, n_launch), np.nan)
         tof_grid = np.full((n_arrival, n_launch), np.nan)
         
-        # Pre-fetch states for efficiency?
-        # SPICE is fast enough for hundreds of calls usually.
-        # But caching states for the unique dates is better.
-        
         dep_states = {}
         for t in launch_dates:
             try:
@@ -77,7 +73,6 @@ class PorkchopPlotter:
                 try:
                     # Solve Lambert
                     # Using prograde=True (short way) for typical inner planet transfers
-                    # For Earth-Mars, check geometry? usually valid.
                     v1_trans, v2_trans = LambertSolver.solve(r1, r2, dt, self.mu_sun, prograde=True)
                     
                     # Compute Depart C3
@@ -116,9 +111,6 @@ class PorkchopPlotter:
         v_inf = data['v_inf_arr']
         tof = data['tof_days']
         
-        # Convert dates to more readable format? 
-        # For now, keep as ET (seconds past J2000) or convert to Days from Start
-        
         l_days = (launch_dates - launch_dates[0]) / 86400.0
         a_days = (arrival_dates - launch_dates[0]) / 86400.0
         
@@ -138,10 +130,6 @@ class PorkchopPlotter:
         ax.set_title(f"Porkchop Plot: {self.dep_body} to {self.arr_body}")
         ax.set_xlabel(f"Days since Launch Window Open (Epoch {launch_dates[0]})")
         ax.set_ylabel(f"Days since Launch Window Open (Arrival)")
-        
-        # Fix Y axis to be arrival DATE? 
-        # Usually X is Launch Date, Y is Arrival Date.
-        # My Y meshgrid is Arrival Date, so it is correct.
         
         if filename:
             plt.savefig(filename)

@@ -48,16 +48,7 @@ def test_rotate_vector_simple():
     assert np.allclose(rotated, expected, atol=1e-8)
 
 def test_compute_outgoing_v_inf_planar():
-    # Planar case: V_inf along X, Beta=0 (so turn is in XY plane presumably?)
-    # or Beta determines the B-plane angle.
-    # B-plane defined by T and R.
-    # If V_inf = [V, 0, 0], S = [1, 0, 0].
-    # Pole = [0, 0, 1].
-    # T = S x Pole = [0, -1, 0].
-    # R = S x T = [0, 0, -1].
-    
-    # If Beta = 0, B is along T ([0, -1, 0] or similar).
-    # Turn happens in plane of S and B. -> XY plane.
+    # Planar case: V_inf along X, Beta=0
     
     v_inf_in = np.array([5.0, 0.0, 0.0])
     beta = 0.0

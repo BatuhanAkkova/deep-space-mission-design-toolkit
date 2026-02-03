@@ -5,9 +5,7 @@ from src.dynamics.nbody import NBodyDynamics
 from src.spice.manager import spice_manager
 
 def test_flyby_correction_convergence():
-    # Setup: Simple Earth Flyby scenario (hypothetical)
-    # We need a body that has gravity.
-    # Let's use EARTH.
+    # Setup: Simple Earth Flyby scenario
     
     # Check if kernels loaded
     # Assuming standard kernels are available or mocked
@@ -19,18 +17,15 @@ def test_flyby_correction_convergence():
     # 1. Define a "Truth" Flyby that hits a specific B-plane target
     # V_inf = [5, 0, 0]
     # Target B = [10000, 5000] (B_R, B_T)
-    # We can analytically construct the state at periapsis or far away that produces this.
-    # But for the test, let's just PICK an initial state that is "close" and correct it.
     
     # Initial Guess: Pointing straight at Earth center (collision course)
     # Relative state
     # r = [-1000000, 0, 0]
     # v = [5, 0, 0]
-    # This hits center. B ~ 0.
     
     # Target: B_R = 7000 (just above surface), B_T = 0
-    target_br = 10000.0
-    target_bt = 5000.0
+    target_br = 7000.0
+    target_bt = 0.0
     
     # Initial state (inertial)
     # Planet state at t=0
@@ -45,14 +40,12 @@ def test_flyby_correction_convergence():
     state0 = np.concatenate((r_e + r_rel, v_e + v_rel))
     
     # Setup NBody
-    # Requires SUN and EARTH
     nbody = NBodyDynamics(bodies=['SUN', 'EARTH'], frame='ECLIPJ2000', central_body='SUN')
     
     corrector = FlybyCorrector(nbody)
     
     # Target
     # Propagate for enough time to pass Earth
-    # dt = 500000 / 5 = 100000 seconds ~ 1.15 days
     dt_flight = 150000.0 
     
     corrected_state, success = corrector.target_b_plane(

@@ -126,8 +126,6 @@ class TisserandGraph:
         v_inf_sq = np.full_like(period_days, np.nan)
         
         # Calculation on valid indices only to avoid domain errors
-        # Note: We need to handle numpy arrays, so we use 'where'
-        
         term_1 = R_pl / a_sc
         
         # Inner term for sqrt: (rp/R_pl) * (2 - rp/a)
@@ -136,16 +134,9 @@ class TisserandGraph:
         
         valid_mask = valid_mask & (rp_km <= a_sc + tol)
         
-        # We use np.maximum to avoid negative values where mask is False, just to suppress warning
         inner_term = (rp_km / R_pl) * (2.0 - rp_km / a_sc)
         inner_term = np.maximum(inner_term, 0) 
-        
         term_2 = 2.0 * np.sqrt(inner_term)
-        
-        # v_inf_sq calculation
-        # It's possible for (3 - ... ) to be negative? v_inf should be real.
-        # If 3 - ... < 0, it means Tisserand criterion violated?
-        # Usually valid intersections give real v_inf.
         
         val = 3.0 - term_1 - term_2
         # If val < 0, set to 0 (or nan)
@@ -165,9 +156,7 @@ class TisserandGraph:
         Plot the Tisserand Graph.
         
         Args:
-            period_range (tuple): (min, max) Period in Years (assuming Earth=1yr approx, or scaling). 
-                                  Actually let's use Days for internal calc but User might want Years.
-                                  Let's stick to Days for Input/Output axis, label as Days.
+            period_range (tuple): (min, max) Period in Days.
             rp_range (tuple): (min, max) Perihelion Radius in AU.
             v_inf_contours (dict): definition of contours. {BodyName: [level1, level2, ...]}
             filename (str): Output filename.
@@ -180,9 +169,6 @@ class TisserandGraph:
         P_grid, Rp_grid = np.meshgrid(np.linspace(p_min, p_max, 200), np.linspace(rp_min, rp_max, 200))
         
         fig, ax = plt.subplots(figsize=(12, 8))
-        
-        # Helper to convert P(days) to Period(Years) for labelling if desired?
-        # Let's stick to Days as fundamental.
         
         colors = ['blue', 'green', 'red', 'orange', 'purple']
         c_idx = 0
@@ -199,16 +185,10 @@ class TisserandGraph:
                 color = colors[c_idx % len(colors)]
                 c_idx += 1
                 
-                # Mask NaNs
-                # Contour ignores NaNs usually
-                
                 cs = ax.contour(P_grid, Rp_grid, v_inf_field, levels=levels, colors=color, linewidths=1.5)
                 ax.clabel(cs, inline=1, fontsize=9, fmt=f'{body_name} %1.1f')
                 
                 # Mark the body itself on the graph
-                # Body is at Period = BodyPeriod, Rp = BodyRadius (mean)
-                # No, Body "State" corresponds to a circular orbit (e=0)
-                # So e=0 implies Rp = a. And Period = BodyPeriod.
                 b_p = self.bodies[body_name]['P'] / 86400.0 # days
                 b_rp = self.bodies[body_name]['a'] / 1.495978707e8 # AU
                 
@@ -229,7 +209,6 @@ class TisserandGraph:
             print(f"Saved Tisserand Graph to {filename}")
             
         if show:
-            plt.close() # Don't block
-            # Actually user can't see 'show()', providing file is better.
+            plt.close()
             return fig
         return fig

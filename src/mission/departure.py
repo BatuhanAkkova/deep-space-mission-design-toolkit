@@ -8,7 +8,6 @@ def calculate_departure_asymptotes(v_inf_vec: np.ndarray, departure_body: str = 
     Args:
         v_inf_vec (np.ndarray): Hyperbolic excess velocity vector [vx, vy, vz] in Body-Centered Inertial Frame (usually EME2000 for Earth).
         departure_body (str): Name of the departure body (default: 'EARTH'). 
-                              (Context: Used for reference frame checks if needed, currently assumes input is in the correct equatorial frame).
                               
     Returns:
         dict: {
@@ -23,9 +22,6 @@ def calculate_departure_asymptotes(v_inf_vec: np.ndarray, departure_body: str = 
     c3 = v_inf_mag**2
     
     # 2. Calculate DLA and RLA
-    # These are essentially the declination and right ascension of the V_inf vector
-    # in the equatorial frame of the departure body.
-    # Assuming v_inf_vec is provided in the Equatorial Inertial Frame (e.g. J2000 for Earth).
     
     # Unit vector
     if v_inf_mag == 0:
@@ -101,8 +97,7 @@ def state_to_orbital_elements(r: np.ndarray, v: np.ndarray, mu: float) -> dict:
             
     # Argument of Periapsis (omega)
     if n_mag == 0:
-        # Equatorial: angle between I and e?
-        arg_p_rad = 0.0 # Ambiguous
+        arg_p_rad = 0.0
     else:
         if e < 1e-9:
              arg_p_rad = 0.0
@@ -111,16 +106,9 @@ def state_to_orbital_elements(r: np.ndarray, v: np.ndarray, mu: float) -> dict:
              if e_vec[2] < 0:
                  arg_p_rad = 2 * np.pi - arg_p_rad
                  
-    # True Anomaly (nu)
-    if e < 1e-9:
-        # Circular: angle between n and r? 
-        # Actually usually argument of latitude u = omega + nu
-        pass 
-        
+    # True Anomaly (nu)        
     if e == 0:
         xp = np.dot(r, n_vec)/n_mag if n_mag > 0 else r[0] # simplification
-        # This part is tricky for special cases.
-        # Let's simple check angle between e and r.
         nu_rad = 0.0
     else:
         nu_rad = np.arccos(np.dot(e_vec, r) / (e * r_mag))

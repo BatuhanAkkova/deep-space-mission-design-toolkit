@@ -20,6 +20,8 @@ class IndirectSolver:
         # Numeric functions
         self.f_sys = None # Function for dy/dt = [x_dot, lambda_dot]
         self.f_bc = None  # Function for boundary conditions
+        self._numeric_dynamics = None
+        self._numeric_H = None
         
         self.parameter_values = {} # Stores current value of parameters
 
@@ -35,20 +37,17 @@ class IndirectSolver:
         self.H = self.ocp.get_hamiltonian(self.costates)
         
         # 3. Stationarity Condition: dH/du = 0
-        # If possible, solve for u* explicitly in terms of x and lambda
-        # For now, we assume we can solve for u explicitly or u is unconstrained in simple cases.
-        # TODO: Handle numerical root finding for u if explicit solution fails.
         for u in self.ocp.controls:
             stationarity = sp.diff(self.H, u)
             sol = sp.solve(stationarity, u)
             if sol:
-                # Take the first solution (careful with multiple roots!)
                 self.control_eqs[u] = sol[0]
             else:
-                 print(f"Warning: Could not solve explicitly for control {u}. Numerical optimization required.")
+                 raise NotImplementedError(f"Could not solve explicitly for control {u}. "
+                                           "Ensure the Hamiltonian is convex with respect to control, "
+                                           "or provide a custom formulation.")
 
-        # 4. State Dynamics: x_dot = dH/dlambda (recovers original dynamics)
-        # We substitute u* into these
+        # 4. State Dynamics: x_dot = dH/dlambda
         
         # 5. Costate Dynamics: lambda_dot = -dH/dx
         # Euler-Lagrange Equations
@@ -66,12 +65,8 @@ class IndirectSolver:
         # Process Costate Equations (lambda_dot)
         for x, lam in zip(self.ocp.states, self.costates):
             # lambda_dot = - partial H / partial x
-            # Note: We differentiate H BEFORE substituting u (partial derivative rule)
-            # OR we can use the total derivative if we consider u(x, lambda).
-            # PMP says partial H / partial x holding u const.
             dh_dx = sp.diff(self.H, x)
             codyn = -dh_dx
-            # Now substitute u*
             codyn_sub = codyn.subs(substitutions)
             self.costate_eqs.append(codyn_sub)
             
@@ -86,13 +81,7 @@ class IndirectSolver:
         # Dynamics vector [x_dot..., lam_dot...]
         dynamics_exprs = self.state_eqs + self.costate_eqs
         
-        # Since solve_bvp passes y of shape (n, N), we need vectorized functions?
-        # sp.lambdify usually handles numpy arrays if 'numpy' module is passed.
-        
-        # However, sympy Function objects like x(t) need to be treated as symbols for lambdify
         # We replace f(t) with dummy symbols for lambdification
-        
-        # Helper to get name
         def get_name(v):
             return v.func.name if hasattr(v, 'func') else v.name
 
@@ -102,23 +91,16 @@ class IndirectSolver:
         dynamics_numeric = [expr.subs(subs_map) for expr in dynamics_exprs]
         
         # Create the function f(t, y, p)
-        # Note: solve_bvp expects f(t, y) -> shape (n, m)
-        # We include params in the lambdified function signature
         params = self.ocp.parameters
         self._numeric_dynamics = sp.lambdify((t_sym, dummy_vars, params), dynamics_numeric, modules='numpy')
 
-        # Boundary Conditions
-        # BCs usually come from:
-        # 1. Initial State: x(t0) - x0 = 0
-        # 2. Terminal State: x(tf) - xf = 0 (if fixed)
-        # 3. Transversality: lambda(tf) - dPhi/dx(tf) = 0 (if free state)
-        # 4. Transversality: H(tf) + dPhi/dt(tf) = 0 (if free time)
+        # Also compile Hamiltonian for Transversality Conditions
+        substitutions = {u: expr for u, expr in self.control_eqs.items()}
+        H_optimal = self.H.subs(substitutions)
+        H_expr = H_optimal.subs(subs_map)
         
-        # For this version, let's assume specific BoundaryConstraints are passed numerically or
-        # we implement specific generic transversality.
-        # To keep it flexible, we might let the user define the BC function for scipy?
-        # Or we automate it. Let's try to automate standard fixed/free cases.
-        pass
+        self._numeric_H = sp.lambdify((t_sym, dummy_vars, params), H_expr, modules='numpy')
+
 
     def get_ode_fun(self, free_time=False):
         """
@@ -134,12 +116,6 @@ class IndirectSolver:
             args = [y[i] for i in range(len(y))]
             
             # Get parameter values
-            # If free_time, p[0] is tf. Other parameters come after?
-            # For simplicity, let's assume if free_time=True, p is [tf, user_params...]
-            # But currently user_params are stored in self.parameter_values dict.
-            # Let's keep it simple: p passed from solve_bvp contains the UNKNOWN parameters.
-            # Known parameters are in self.parameter_values.
-            
             # If free_time is True, we assume the first element of p is tf.
             tf = 1.0
             if free_time:
@@ -148,11 +124,9 @@ class IndirectSolver:
                 tf = p[0]
             
             # Get user-defined constant parameters
-            # Note: This logic assumes p ONLY contains the unknown parameters optimized by solve_bvp.
             param_vals = [self.parameter_values.get(param.name, 0.0) for param in self.ocp.parameters]
             
             # call compiled dynamics
-            # Note: t might be an array or scalar. lambdify handles broadcasting usually.
             res_list = self._numeric_dynamics(t, args, param_vals)
             
             # Ensure all elements are arrays of the correct shape (broadcast scalars)
@@ -180,38 +154,22 @@ class IndirectSolver:
         
         Args:
             x0: Initial state (numpy array).
-            xf: Target final state (numpy array, Optional). If None, assumes free final state for components.
+            xf: Target final state (numpy array, Optional). 
+                If None, assumes free final state for all components.
+                If xf contains NaNs, those specific components are treated as free.
             free_time: Boolean. If True, adds transversality condition for Hamiltonian.
         
         Returns:
              Function bc(ya, yb, p) -> residuals
         """
+        if self._numeric_H is None:
+             raise RuntimeError("System not lambdified. Call lambdify_system() first.")
+
         n_x = len(self.ocp.states)
         n_lam = len(self.costates)
         
-        # We need the numeric Hamiltonian function for transversality
-        # Symbolically substitute control u* into H
-        substitutions = {u: expr for u, expr in self.control_eqs.items()}
-        H_optimal = self.H.subs(substitutions)
-        
-        # Lambdify H(t, x, lam, params)
-        all_vars = self.ocp.states + self.costates
-        
-        # Helper to get name (redefined locally or make method?)
-        def get_name(v):
-            return v.func.name if hasattr(v, 'func') else v.name
-            
-        dummy_vars = [sp.Symbol(get_name(v)) for v in all_vars]
-        subs_map = dict(zip(all_vars, dummy_vars))
-        H_expr = H_optimal.subs(subs_map)
-        
-        t_sym = self.ocp.t
-        params = self.ocp.parameters
-        
-        numeric_H = sp.lambdify((t_sym, dummy_vars, params), H_expr, modules='numpy')
-
         def bc(ya, yb, p=None):
-            # ya, yb are [x..., lam...] at 0 and tf (or 1)
+            # ya, yb are [x..., lam...] at 0 and tf
             
             res = []
             
@@ -219,66 +177,33 @@ class IndirectSolver:
             res.extend(ya[:n_x] - x0)
             
             # 2. Final Conditions
-            # If xf is provided, enforce x(tf) = xf
-            # If xf is None (or partial), enforce lambda(tf) = ... (Transversality)
-            # For now, simplistic: either process fully fixed or fully free per component?
-            # Or handle provided xf.
-            
             if xf is not None:
-                # Assuming fully fixed state for now
-                # TODO: Support partial state constraints via NaNs or separate mask
-                res.extend(yb[:n_x] - xf)
+                for i in range(n_x):
+                    if np.isnan(xf[i]):
+                        # Free final state for this component -> Costate is zero at tf
+                        # lambda_i(tf) = 0
+                        res.append(yb[n_x + i])
+                    else:
+                        # Fixed final state
+                        # x_i(tf) - xf_i = 0
+                        res.append(yb[i] - xf[i])
             else:
-                # Free final state -> Costates are zero (if no terminal cost phi)
-                # lambda(tf) = dphi/dx
-                # Assuming phi=0 for now or handled manually.
-                # Simplest Transversality: lambda(tf) = 0
+                # Free final state -> Costates are zero
                 res.extend(yb[n_x:]) 
             
             # 3. Free Time Transversality
-            # H(tf) + dphi/dt = 0
-            # For Min Time: L=1, phi=0 -> H(tf) = -1 ?
-            # Wait, Standard result: H(tf) = -1 for min time (L=1).
-            # If L=0 and phi=tf, then H(tf) = -1.
-            
             if free_time:
-                # p[0] is tf
                 tf = p[0]
-                
-                # Calculate H at final point
-                # yb is the state/costate at normalized time 1.
-                # But numeric_H expects 't'. If autonomous, t doesn't matter.
-                # If non-autonomous, t should be tf.
                 
                 # Get User Params
                 param_vals = [self.parameter_values.get(param.name, 0.0) for param in self.ocp.parameters]
                 
-                h_val = numeric_H(tf, yb, param_vals)
-                
-                # Condition depends on objective
-                # If Time Optimal (L=1), H(tf) should be 0? No.
-                # Min J = int(1) dt. H = 1 + lambda*f.
-                # Transversality: H(tf) = 0 (if final time free and fixed end state).
-                # WAIT. Pontryagin: H(tf) = - dPhi/dt.
-                # If Phi=0, H(tf) = 0. 
-                # BUT for Min Time, Hamiltonian is often defined with p0 (abnormal multiplier).
-                # Common form: H + 1 = 0 or H = 0 depending on definition.
-                
-                # Let's use the property:
-                # If min time, H(tf) = -1? 
-                # Let's assume the user sets up the problem such that H(tf) should be 0 (general case for free time autonomous).
-                # OR user can specific target H value.
-                
-                # For Generic Free Time with fixed endpoint: H(tf) = 0 is common for autonomous systems.
-                # Let's enforce H(tf) = 0 by default for free time.
+                # yb is the state at t=End (normalized t=1). Actual t=tf if autonomous.
+                # If non-autonomous, pass tf as time.
+                h_val = self._numeric_H(tf, yb, param_vals)
                 
                 target_H = 0.0
-                if self.ocp.objective_type == 'min_time':
-                    # If user didn't put '1' in L, but put 'tf' in Phi?
-                    # If L=1, then H = 1 + ...
-                    # H(tf) = 0 => 1 + lambda*f = 0.
-                    pass
-                
+                # Assuming minimal time or Hamiltonian = 0 at tf for autonomous free-time
                 res.append(h_val - target_H)
                 
             return np.array(res)
@@ -294,20 +219,12 @@ class IndirectSolver:
             
         fun = self.get_ode_fun(free_time=free_time)
         
-        # If bc_func is None, we need x0 and xf from somewhere? 
-        # For now, require bc_func or upgrade this method.
         if bc_func is None:
             raise ValueError("Please provide bc_func. Automated generation requires calling create_bc_function first.")
             
         # P for parameters
         p = None
         if free_time:
-            # We need an initial guess for tf.
-            # Assuming t_guess is normalized [0,1], we can try to guess tf from original t_guess?
-            # Or user must provide it.
-            # Let's assume t_guess is NOT normalized and we normalize it here?
-            # Complexity: mixing raw and normalized.
-            # Let's assume input t_guess is real time.
             tf_guess = t_guess[-1]
             p = [tf_guess]
             
@@ -341,16 +258,6 @@ class IndirectSolver:
         current_t = t_guess
         current_y = y_guess
         
-        # We need a way to update the numerical function with the new parameter value.
-        # Currently, numeric_dynamics depends on (t, y). 
-        # If the standard lambdify was used, it expects specific arguments.
-        # If OCP has parameters, we need to handle them in lambdify.
-        
-        # TODO: This requires OCP to support parameters and lambdify to include them.
-        # For now, we will assume the user manually updates the OCP or we re-lambdify? 
-        # Re-lambdifying is slow.
-        # Better: pass parameters as arguments to the symbolic function.
-        
         print(f"Homotopy: Starting continuation on {param_name} over {len(param_values)} steps.")
         
         last_res = None
@@ -365,7 +272,6 @@ class IndirectSolver:
                  res = self.solve(current_t, current_y, bc_func, verbose=0) # reduced verbosity
                  if not res.success:
                      print(f"Warning: Convergence failed at {param_name}={val}. Retrying with higher verbosity/tolerance could be needed.")
-                     # Might want to break or continue?
                  
                  # Update guess for next step
                  current_t = res.x
@@ -380,8 +286,6 @@ class IndirectSolver:
     def set_parameter_value(self, name: str, value: float):
         """
         Sets a value for a symbolic parameter.
-        Note: This is a placeholder. Real implementation needs `lambdify` to accept args.
-        For this prototype, we'll store it in a dict and `get_ode_fun` should use it.
         """
         if not hasattr(self, 'parameter_values'):
             self.parameter_values = {}
