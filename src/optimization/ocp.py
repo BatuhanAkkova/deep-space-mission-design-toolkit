@@ -14,6 +14,7 @@ class OptimalControlProblem:
         self.L = 0  # Running cost (Lagrangian)
         self.phi = 0  # Terminal cost (Mayer term)
         self.constraints = {} # Boundary constraints
+        self.objective_type = 'general' # 'min_time', 'min_fuel', 'general'
 
     def set_time_variable(self, name: str = 't'):
         """Sets the symbol for the independent variable."""
@@ -89,3 +90,19 @@ class OptimalControlProblem:
         for lam, f in zip(costates, self.dynamics):
             H += lam * f
         return H
+
+    def set_smoothed_fuel_cost(self, control_symbols: List[sp.Symbol], weight: float = 1.0, epsilon: float = 0.1):
+        """
+        Sets a smoothed L1 cost: L = weight * sqrt(u^2 + epsilon^2).
+        Approximates |u| as epsilon -> 0.
+        """
+        cost = 0
+        for u in control_symbols:
+            # sqrt(u^2 + eps^2)
+            # define epsilon as a symbol if possible to vary it later?
+            # Or assume the user passes a symbol?
+            # Let's assume epsilon is a symbol or float.
+            cost += weight * sp.sqrt(u**2 + epsilon**2)
+        
+        self.L = cost
+        self.objective_type = 'min_fuel'

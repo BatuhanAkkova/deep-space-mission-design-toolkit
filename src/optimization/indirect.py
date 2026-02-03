@@ -29,7 +29,7 @@ class IndirectSolver:
         """
         # 1. Define Costates (Lagrange Multipliers)
         # Note: Costates are functions of time, same as states
-        self.costates = [sp.Function(f'lambda_{s.name}')(self.ocp.t) for s in self.ocp.states]
+        self.costates = [sp.Function(f'lambda_{s.func.name}')(self.ocp.t) for s in self.ocp.states]
         
         # 2. Form Hamiltonian
         self.H = self.ocp.get_hamiltonian(self.costates)
@@ -92,7 +92,11 @@ class IndirectSolver:
         # However, sympy Function objects like x(t) need to be treated as symbols for lambdify
         # We replace f(t) with dummy symbols for lambdification
         
-        dummy_vars = [sp.Symbol(v.name) for v in all_vars]
+        # Helper to get name
+        def get_name(v):
+            return v.func.name if hasattr(v, 'func') else v.name
+
+        dummy_vars = [sp.Symbol(get_name(v)) for v in all_vars]
         subs_map = dict(zip(all_vars, dummy_vars))
         
         dynamics_numeric = [expr.subs(subs_map) for expr in dynamics_exprs]
@@ -116,54 +120,210 @@ class IndirectSolver:
         # Or we automate it. Let's try to automate standard fixed/free cases.
         pass
 
-    def get_ode_fun(self):
-        """Returns the function f(t, y) formatted for scipy.integrate.solve_bvp."""
+    def get_ode_fun(self, free_time=False):
+        """
+        Returns the function f(t, y, p) formatted for scipy.integrate.solve_bvp.
+        
+        Args:
+            free_time: If True, assumes p[0] is t_f and scales dynamics by t_f.
+                       The independent variable t is assumed to be normalized [0, 1].
+        """
         def fun(t, y, p=None): # p is parameters
             # y shape (n_states + n_costates, n_points)
             # unpack y
             args = [y[i] for i in range(len(y))]
             
-            # Get parameter values in order
-            param_vals = [self.parameter_values.get(p.name, 0.0) for p in self.ocp.parameters]
+            # Get parameter values
+            # If free_time, p[0] is tf. Other parameters come after?
+            # For simplicity, let's assume if free_time=True, p is [tf, user_params...]
+            # But currently user_params are stored in self.parameter_values dict.
+            # Let's keep it simple: p passed from solve_bvp contains the UNKNOWN parameters.
+            # Known parameters are in self.parameter_values.
+            
+            # If free_time is True, we assume the first element of p is tf.
+            tf = 1.0
+            if free_time:
+                if p is None or len(p) == 0:
+                    raise ValueError("free_time=True but no parameters passed to ODE function.")
+                tf = p[0]
+            
+            # Get user-defined constant parameters
+            # Note: This logic assumes p ONLY contains the unknown parameters optimized by solve_bvp.
+            param_vals = [self.parameter_values.get(param.name, 0.0) for param in self.ocp.parameters]
             
             # call compiled dynamics
             # Note: t might be an array or scalar. lambdify handles broadcasting usually.
             res_list = self._numeric_dynamics(t, args, param_vals)
             
             # Ensure all elements are arrays of the correct shape (broadcast scalars)
-            # t is (n_nodes,)
-            
             final_res = []
             shape_target = t.shape if isinstance(t, np.ndarray) else ()
             
             for item in res_list:
-                if np.ndim(item) == 0: # scalar or 0-d array
-                    if shape_target: # if t is an array, broadcast
-                        final_res.append(np.full(shape_target, item))
-                    else: # t is scalar
-                        final_res.append(item)
-                else:
-                    final_res.append(item)
+                val = item
+                if np.ndim(val) == 0: 
+                    if shape_target: 
+                        val = np.full(shape_target, val)
+                
+                # Scale by tf if free time (dx/dtau = dx/dt * dt/dtau = f * tf)
+                if free_time:
+                    val = val * tf
+                    
+                final_res.append(val)
             
             return np.array(final_res)
         return fun
 
-    def solve(self, t_guess, y_guess, bc_func: Callable, verbose=2, tol=1e-3, max_nodes=1000):
+    def create_bc_function(self, x0, xf=None, free_time=False, custom_transversality=None):
         """
-        Solves the BVP.
+        Creates a boundary condition function for solve_bvp.
         
         Args:
-            t_guess: Initial mesh (array).
-            y_guess: Initial guess for y [x..., lam...] at mesh points.
-            bc_func: Boundary condition function bc(y_a, y_b) -> residuals.
+            x0: Initial state (numpy array).
+            xf: Target final state (numpy array, Optional). If None, assumes free final state for components.
+            free_time: Boolean. If True, adds transversality condition for Hamiltonian.
+        
+        Returns:
+             Function bc(ya, yb, p) -> residuals
+        """
+        n_x = len(self.ocp.states)
+        n_lam = len(self.costates)
+        
+        # We need the numeric Hamiltonian function for transversality
+        # Symbolically substitute control u* into H
+        substitutions = {u: expr for u, expr in self.control_eqs.items()}
+        H_optimal = self.H.subs(substitutions)
+        
+        # Lambdify H(t, x, lam, params)
+        all_vars = self.ocp.states + self.costates
+        
+        # Helper to get name (redefined locally or make method?)
+        def get_name(v):
+            return v.func.name if hasattr(v, 'func') else v.name
+            
+        dummy_vars = [sp.Symbol(get_name(v)) for v in all_vars]
+        subs_map = dict(zip(all_vars, dummy_vars))
+        H_expr = H_optimal.subs(subs_map)
+        
+        t_sym = self.ocp.t
+        params = self.ocp.parameters
+        
+        numeric_H = sp.lambdify((t_sym, dummy_vars, params), H_expr, modules='numpy')
+
+        def bc(ya, yb, p=None):
+            # ya, yb are [x..., lam...] at 0 and tf (or 1)
+            
+            res = []
+            
+            # 1. Initial State Condition: x(0) - x0 = 0
+            res.extend(ya[:n_x] - x0)
+            
+            # 2. Final Conditions
+            # If xf is provided, enforce x(tf) = xf
+            # If xf is None (or partial), enforce lambda(tf) = ... (Transversality)
+            # For now, simplistic: either process fully fixed or fully free per component?
+            # Or handle provided xf.
+            
+            if xf is not None:
+                # Assuming fully fixed state for now
+                # TODO: Support partial state constraints via NaNs or separate mask
+                res.extend(yb[:n_x] - xf)
+            else:
+                # Free final state -> Costates are zero (if no terminal cost phi)
+                # lambda(tf) = dphi/dx
+                # Assuming phi=0 for now or handled manually.
+                # Simplest Transversality: lambda(tf) = 0
+                res.extend(yb[n_x:]) 
+            
+            # 3. Free Time Transversality
+            # H(tf) + dphi/dt = 0
+            # For Min Time: L=1, phi=0 -> H(tf) = -1 ?
+            # Wait, Standard result: H(tf) = -1 for min time (L=1).
+            # If L=0 and phi=tf, then H(tf) = -1.
+            
+            if free_time:
+                # p[0] is tf
+                tf = p[0]
+                
+                # Calculate H at final point
+                # yb is the state/costate at normalized time 1.
+                # But numeric_H expects 't'. If autonomous, t doesn't matter.
+                # If non-autonomous, t should be tf.
+                
+                # Get User Params
+                param_vals = [self.parameter_values.get(param.name, 0.0) for param in self.ocp.parameters]
+                
+                h_val = numeric_H(tf, yb, param_vals)
+                
+                # Condition depends on objective
+                # If Time Optimal (L=1), H(tf) should be 0? No.
+                # Min J = int(1) dt. H = 1 + lambda*f.
+                # Transversality: H(tf) = 0 (if final time free and fixed end state).
+                # WAIT. Pontryagin: H(tf) = - dPhi/dt.
+                # If Phi=0, H(tf) = 0. 
+                # BUT for Min Time, Hamiltonian is often defined with p0 (abnormal multiplier).
+                # Common form: H + 1 = 0 or H = 0 depending on definition.
+                
+                # Let's use the property:
+                # If min time, H(tf) = -1? 
+                # Let's assume the user sets up the problem such that H(tf) should be 0 (general case for free time autonomous).
+                # OR user can specific target H value.
+                
+                # For Generic Free Time with fixed endpoint: H(tf) = 0 is common for autonomous systems.
+                # Let's enforce H(tf) = 0 by default for free time.
+                
+                target_H = 0.0
+                if self.ocp.objective_type == 'min_time':
+                    # If user didn't put '1' in L, but put 'tf' in Phi?
+                    # If L=1, then H = 1 + ...
+                    # H(tf) = 0 => 1 + lambda*f = 0.
+                    pass
+                
+                res.append(h_val - target_H)
+                
+            return np.array(res)
+            
+        return bc
+
+    def solve(self, t_guess, y_guess, bc_func: Callable = None, verbose=2, tol=1e-3, max_nodes=1000, free_time=False):
+        """
+        Solves the BVP.
         """
         if self._numeric_dynamics is None:
             raise RuntimeError("System not lambdified. Call derive_conditions() and lambdify_system() first.")
             
-        fun = self.get_ode_fun()
+        fun = self.get_ode_fun(free_time=free_time)
         
-        res = solve_bvp(fun, bc_func, t_guess, y_guess, verbose=verbose, tol=tol, max_nodes=max_nodes)
-        
+        # If bc_func is None, we need x0 and xf from somewhere? 
+        # For now, require bc_func or upgrade this method.
+        if bc_func is None:
+            raise ValueError("Please provide bc_func. Automated generation requires calling create_bc_function first.")
+            
+        # P for parameters
+        p = None
+        if free_time:
+            # We need an initial guess for tf.
+            # Assuming t_guess is normalized [0,1], we can try to guess tf from original t_guess?
+            # Or user must provide it.
+            # Let's assume t_guess is NOT normalized and we normalize it here?
+            # Complexity: mixing raw and normalized.
+            # Let's assume input t_guess is real time.
+            tf_guess = t_guess[-1]
+            p = [tf_guess]
+            
+            # Normalize t_guess to [0, 1]
+            t_guess_norm = t_guess / tf_guess
+            t_eval = t_guess_norm
+        else:
+            t_eval = t_guess
+
+        res = solve_bvp(fun, bc_func, t_eval, y_guess, p=p, verbose=verbose, tol=tol, max_nodes=max_nodes)
+
+        # Denormalize if free time
+        if free_time and res.success:
+            tf_found = res.p[0]
+            res.x = res.x * tf_found
+            
         return res
 
     def solve_with_homotopy(self, t_guess, y_guess, bc_func: Callable, param_name: str, param_values: List[float], verbose=2):
