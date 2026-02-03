@@ -25,7 +25,7 @@ class TestPerturbations:
 
     def test_body_constant(self):
         # Check Earth Radius
-        rad = spice_manager.get_body_constant('EARTH', 'RADII')
+        rad = spice_manager.get_body_constant('EARTH', 'RADII', 3)
         assert len(rad) == 3
         assert rad[0] > 6000 # km
 

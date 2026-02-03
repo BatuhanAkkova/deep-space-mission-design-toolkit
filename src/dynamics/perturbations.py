@@ -59,7 +59,7 @@ class J2Perturbation(Perturbation):
         try:
             self.mu = spice_manager.get_mu(central_body)
             # RADII usually has 3 elements (a, b, c)
-            self.R_body = spice_manager.get_body_constant(central_body, 'RADII')[0] 
+            self.R_body = spice_manager.get_body_constant(central_body, 'RADII', 3)[0] 
             self.J2 = spice_manager.get_body_constant(central_body, 'J2')
         except Exception as e:
             warnings.warn(f"Failed to initialize J2 for {central_body}: {e}")
@@ -95,7 +95,7 @@ class J2Perturbation(Perturbation):
         
         # 3. Rotate back to Inertial
         # a_inertial = R^T * a_fixed
-        return R.T @ a_fixed
+        return (R.T @ a_fixed).flatten()
 
 class SSRPerturbation(Perturbation):
     """
@@ -159,7 +159,7 @@ class SSRPerturbation(Perturbation):
         accel_mag_m_s2 = force_mag_N / self.mass
         accel_mag_km_s2 = accel_mag_m_s2 / 1000.0
         
-        return accel_mag_km_s2 * (r_sun_sc / dist_km)
+        return (accel_mag_km_s2 * (r_sun_sc / dist_km)).flatten()
 
 
 class DragPerturbation(Perturbation):
@@ -241,4 +241,4 @@ class DragPerturbation(Perturbation):
         
         a_drag_vec_m_s2 = -a_drag_m_s2 * (v_rel_m / v_rel_mag_m)
         
-        return a_drag_vec_m_s2 / 1000.0
+        return (a_drag_vec_m_s2 / 1000.0).flatten()

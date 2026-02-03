@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import newton
 
 class LambertSolver:
     """
@@ -172,136 +173,35 @@ class LambertSolver:
         # "A" constant
         A = np.sin(dnu) * np.sqrt((r1_mag * r2_mag) / (1 - np.cos(dnu)))
         
-        if A == 0:
+        if abs(A) < 1e-12:
             raise RuntimeError("Limit case A=0 (180 degree transfer) not handled.")
 
-        # Iteration for z (universal variable)
-        # Using Newton-Raphson
-        
-        # y(z) = r1 + r2 + A * (z * S(z) - 1) / sqrt(C(z))
-        # But we need time equation:
-        # dt = ...
-        
-        # Standard loop
-        z = 0.0
-        ratio = 1.0
-        iter_count = 0
-        
-        while abs(ratio) > tol and iter_count < max_iter:
-            iter_count += 1
-            C = LambertSolver.stumpC(z)
-            S = LambertSolver.stumpS(z)
-            
-            y = r1_mag + r2_mag + A * (z * S - 1.0) / np.sqrt(C)
-            
-            # Check for physical validity
-            if y < 0:
-                # If y becomes negative, we might be diverging or no solution?
-                # Usually adjust z. 
-                # This implementation is a basic one.
-                pass 
-                
-            x = np.sqrt(y / C)
-            dt_est = (x**3 * S + A * np.sqrt(y)) / np.sqrt(mu)
-            
-            # Derivative of dt wrt z?
-            # Or use simpler algorithm?
-            
-            if z == 0:
-                # Near parabola
-                dtdz = (np.sqrt(2) / 40.0) * (y**1.5) + (A/8.0) * (np.sqrt(y) + A * np.sqrt(1/(2*y)))
-            else:
-                 # Need derivatives of C and S
-                 # It's complex.
-                 pass
-                 
-            # Let's switch to the specific algorithm:
-            # F = (y/C)^1.5 * S + A * sqrt(y) - sqrt(mu) * dt
-            # dF/dz = ...
-            
-            # Simpler Newton step from Bate, Mueller, White:
-            x = np.sqrt( y / C )
-            dt_calc = ( x**3 * S + A * np.sqrt(y) ) / np.sqrt(mu)
-            
-            grad = 0.0
-            if z == 0:
-                 grad = np.sqrt(2)/40 * y**1.5 + A/8 * ( np.sqrt(y) + A * np.sqrt(1/2/y))
-            else:
-                 grad = (x**3 * (S * LambertSolver.dstumpS(z) - 1.5 * S * LambertSolver.dstumpC(z)/C) + 
-                         A/8 * (3 * S/C * np.sqrt(y) + A * np.sqrt(C/y))) 
-                 # This derivative formula is notoriously tricky.
-            
-            # Let's try to implement the exact formulation from Vallado "Fundamentals of Astrodynamics and Applications"
-            # Algorithm 58
-            
-            if C == 0: C = 1e-9 # protect division
-            
-            # Compute new F value
-            F = dt_calc - dt
-            
-            # We need dF/dz. 
-            # A common approximation or exact formula:
-            if z == 0:
-                 dFdz = np.sqrt(2)/40 * y**1.5 + A/8 * (np.sqrt(y) + A*np.sqrt(1/(2*y)))
-            else:
-                 dFdz = (y/C)**1.5 * ( (1/(2*z)) * (C - 1.5*S/C) + 0.75 * (S**2)/C ) + (A/8) * ( 3*S/C * np.sqrt(y) + A * np.sqrt(C/y) )
-
-            # Actually, let's use a simpler known python snippet logic or re-derive carefully?
-            # Or use a very standard iterative update.
-            
-            if abs(F) < tol:
-                break
-            
-            # Update z
-            # ratio = F / dFdz
-            # z = z - ratio
-            
-            # Let's use a simplified approach that is known to work:
-            # Curtis, "Orbital Mechanics for Engineering Students", Algorithm 5.2
-            
-            C = LambertSolver.stumpC(z)
-            S = LambertSolver.stumpS(z)
-            y = r1_mag + r2_mag + A * (z * S - 1) / np.sqrt(C)
-            
-            t = (x**3 * S + A * np.sqrt(y)) / np.sqrt(mu) # This is t, not dt. Wait.
-            
-            # Wait, `x` depends on `y`
-            x = np.sqrt(y/C)
-            
-            # Let's just write the derivative clearly:
-            dydz = 0.0 #...
-            # This is high risk of getting wrong in one shot.
-            
-            # ALTERNATIVE: Use Python's scipy.optimize.newton?
-            # We can define a function f(z) -> dt_error
-            # And solve for z.
-            
-            pass 
-        
-        # USE SCIPY ROOT FINDING FOR ROBUSTNESS
-        from scipy.optimize import newton
-
         def tof_equation(z):
-            C = LambertSolver.stumpC(z)
-            S = LambertSolver.stumpS(z)
-            y = r1_mag + r2_mag + A * (z * S - 1.0) / np.sqrt(C)
+            # Universal variable time of flight equation
+            c_z = LambertSolver.stumpC(z)
+            s_z = LambertSolver.stumpS(z)
             
-            # Valid y check
-            if y < 0:
-                # This region is physical unfeasible or requires complex handling.
-                # Use nan to signal solver?
+            # Use small epsilon to avoid divide by zero if z -> near zero where C=0.5
+            y = r1_mag + r2_mag + A * (z * s_z - 1.0) / np.sqrt(max(c_z, 1e-12))
+            
+            if y <= 0:
+                # Return a large value or nan to steer solver away from unphysical regions
                 return np.nan
             
-            x = np.sqrt(y / C)
-            t_flight = (x**3 * S + A * np.sqrt(y)) / np.sqrt(mu)
+            x = np.sqrt(y / c_z)
+            t_flight = (x**3 * s_z + A * np.sqrt(y)) / np.sqrt(mu)
             return t_flight - dt
 
         try:
-            # Initial guess: z=0 (Parabolic)
+            # For robustness, we check a few initial guesses if z=0 fails
+            # Most Lambert problems converge with z=0 (parabolic start)
             z_sol = newton(tof_equation, 0.0, tol=tol, maxiter=max_iter)
-        except RuntimeError:
-            # Fallback or error
-            raise RuntimeError("Lambert solver failed to converge.")
+        except (RuntimeError, ValueError):
+            # Try a slightly different guess if it failed to converge
+            try:
+                z_sol = newton(tof_equation, 1.0, tol=tol, maxiter=max_iter)
+            except:
+                raise RuntimeError("Lambert solver failed to converge.")
 
         z = z_sol
         C = LambertSolver.stumpC(z)

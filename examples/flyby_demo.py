@@ -43,11 +43,10 @@ def main():
     
     print("\n--- Analytic Calculation ---")
     analytic_res = calculator.analyze_flyby(v_inf_in, periapsis_alt, beta_angle)
-    
     print(f"Incoming V_inf: {analytic_res['v_inf_in']} km/s")
     print(f"Mag: {np.linalg.norm(analytic_res['v_inf_in']):.3f} km/s")
     print(f"Periapsis Alt: {analytic_res['altitude']} km")
-    print(f"Turn Angle: {analytic_res['delta_deg']:.3f} deg")
+    print(f"Turn Angle: {analytic_res['delta_deg'].item():.3f} deg")
     print(f"Analytic Outgoing V_inf: {analytic_res['v_inf_out']} km/s")
     print(f"Mag: {np.linalg.norm(analytic_res['v_inf_out']):.3f} km/s")
     
@@ -64,7 +63,7 @@ def main():
     print(f"Mag: {np.linalg.norm(measured_v_inf):.3f} km/s")
     
     delta_err = abs(prop_res['analytic_delta'] - prop_res['measured_delta'])
-    print(f"Turn Angle Error: {delta_err:.4f} degrees")
+    print(f"Turn Angle Error: {delta_err.item():.4f} degrees")
     
     v_diff = np.linalg.norm(analytic_res['v_inf_out'] - measured_v_inf)
     print(f"Vector Difference Norm: {v_diff:.4f} km/s")
@@ -103,7 +102,7 @@ def plot_trajectory(results, body, epoch, frame='ECLIPJ2000'):
     rel_pos_back = np.array(rel_pos_back).T
     
     # Debug prints
-    radii = spice_manager.get_radii(body)
+    radii = spice_manager.get_body_constant(body, 'RADII', 3)
     R = radii[0]
     print(f"\n--- Visualization Debug ---")
     print(f"Planet Radius: {R} km")

@@ -28,11 +28,11 @@ def test_lambert_circular_earth():
     v1, v2 = LambertSolver.solve(r1, r2, dt, mu_sun)
     
     # Tolerance
-    np.testing.assert_allclose(v1, v1_expected, rtol=1e-5, err_msg="Initial velocity mismatch for 90deg circular arc")
+    np.testing.assert_allclose(v1, v1_expected, rtol=1e-5, atol=1e-8, err_msg="Initial velocity mismatch for 90deg circular arc")
     
     # v2 should be [-v_earth, 0, 0]
     v2_expected = np.array([-v_earth, 0.0, 0.0])
-    np.testing.assert_allclose(v2, v2_expected, rtol=1e-5, err_msg="Final velocity mismatch for 90deg circular arc")
+    np.testing.assert_allclose(v2, v2_expected, rtol=1e-5, atol=1e-8, err_msg="Final velocity mismatch for 90deg circular arc")
 
 def test_lambert_180_failure_case():
     """
