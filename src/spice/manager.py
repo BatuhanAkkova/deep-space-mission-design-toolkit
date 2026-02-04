@@ -131,9 +131,6 @@ class SpiceManager:
         import datetime
         # Get ISOC format: YYYY-MM-DDTHH:MM:SS.sss
         s = self.et2utc(et, "ISOC", 3)
-        # Parse manually or check if 'Z' is at end
-        # Example format: 2005-01-01T12:00:00.000
-        # If no Z, assume it matches.
         if s.endswith('Z'):
             s = s[:-1]
         return datetime.datetime.fromisoformat(s)

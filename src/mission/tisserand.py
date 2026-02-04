@@ -131,8 +131,7 @@ class TisserandGraph:
         
         # Inner term for sqrt: (rp/R_pl) * (2 - rp/a)
         # 2 - rp/a = 2 - rp_km / a_sc
-        # Also need rp <= a for valid elliptic orbit
-        
+        # rp <= a for valid elliptic orbit
         valid_mask = valid_mask & (rp_km <= a_sc + tol)
         
         inner_term = (rp_km / R_pl) * (2.0 - rp_km / a_sc)
@@ -215,7 +214,8 @@ class TisserandGraph:
                     T_sc = (float(n) / float(m)) * T_pl
                     
                     if p_min <= T_sc <= p_max:
-                        ax.hlines(y=T_sc, xmin=rp_min, xmax=rp_max, colors='gray', linestyles=':', alpha=0.5)                        
+                        # ax.hlines(y=T_sc, xmin=rp_min, xmax=rp_max, colors='gray', linestyles=':', alpha=0.5) 
+                        # Note: Y-axis is Radius, not Period. Resonance lines are constant Period, so they are vertical lines.
                         ax.vlines(x=T_sc, ymin=rp_min, ymax=rp_max, colors='gray', linestyles=':', alpha=0.5)
                         
                         # Label
@@ -240,6 +240,32 @@ class TisserandGraph:
             print(f"Saved Tisserand Graph to {filename}")
             
         if show:
-            plt.close()
-            return fig
-        return fig
+            plt.show() # Changed from close to show for interactive users, typically. Or keep close if strict file gen.
+            # actually for the demo we usually want to save.
+            # but returning ax allows further modification before saving if we move save out.
+            # For now, let's keep the save behavior but return ax.
+            pass
+            
+        return fig, ax
+
+    def overlay_sequence(self, ax, sequence: list, label: str = "Trajectory"):
+        """
+        Overlay a trajectory sequence on the graph.
+        
+        Args:
+            ax: Matplotlib axis.
+            sequence: List of dicts with {'P': day, 'Rp': AU, 'name': str}
+            label: Label for the legend.
+        """
+        # Unzip
+        ps = [item['P'] for item in sequence]
+        rps = [item['Rp'] for item in sequence]
+        
+        # Plot path
+        ax.plot(ps, rps, 'k--', linewidth=2, label=label, marker='x', markersize=8)
+        
+        # Label points
+        for item in sequence:
+            txt = item.get('name', '')
+            if txt:
+                ax.text(item['P'], item['Rp']+0.1, txt, fontsize=9, fontweight='bold', ha='center')

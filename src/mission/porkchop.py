@@ -141,44 +141,48 @@ class PorkchopPlotter:
         
         fig, ax = plt.subplots(figsize=(12, 10))
         
-        # 1. C3 Contours (Departure Energy) - Solid Lines
-        levels_c3 = np.linspace(0, max_c3, 20)
-        # Add specific low levels for detail
-        if np.nanmin(c3) < 15:
-            levels_c3 = np.sort(np.unique(np.concatenate((levels_c3, [10, 12, 15, 20]))))
-            
-        cs = ax.contour(X, Y, c3, levels=levels_c3, colors='blue', linewidths=1.0)
-        ax.clabel(cs, inline=1, fontsize=9, fmt=r'$C_3$=%1.1f')
+        # 1. C3 Contours (Departure Energy) - Blue Solid Lines
+        levels_c3 = np.linspace(np.nanmin(c3), max_c3, 20)
+        cs = ax.contour(X, Y, c3, levels=levels_c3, colors='blue', linewidths=1.2)
+        ax.clabel(cs, inline=1, fontsize=9, fmt=r'%1.1f')
         
-        # 2. TOF Contours (Time of Flight) - Dashed Gray
-        cs_tof = ax.contour(X, Y, tof, colors='gray', linestyles='dashed', linewidths=0.8, alpha=0.7)
+        # 2. TOF Contours (Time of Flight) - Red Dashed/Solid Lines
+        # The user requested "red lines". I'll use solid or dashed red. 
+        # Typically TOF is dashed to distinguish from energy, but red color is the key.
+        tof_min = np.nanmin(tof)
+        tof_max = np.nanmax(tof)
+        levels_tof = np.linspace(tof_min, tof_max, 15)
+        cs_tof = ax.contour(X, Y, tof, levels=levels_tof, colors='red', linestyles='-', linewidths=1.0, alpha=0.6)
         ax.clabel(cs_tof, inline=1, fontsize=8, fmt='%d d')
         
-        # 3. Arrival V_inf - Dotted Red (Optional or primary?)
-        # Let's add them as thin red lines
-        levels_vinf = np.linspace(0, max_vinf, 10)
-        cs_vinf = ax.contour(X, Y, v_inf, levels=levels_vinf, colors='red', linestyles='dotted', linewidths=1.0)
-        ax.clabel(cs_vinf, inline=1, fontsize=8, fmt=r'$V_{\infty}$=%1.1f')
+        # 3. Mark Optimal Point (Lowest C3)
+        min_idx = np.unravel_index(np.nanargmin(c3), c3.shape)
+        opt_launch = X[min_idx]
+        opt_arrival = Y[min_idx]
+        opt_c3 = c3[min_idx]
+        
+        ax.plot(opt_launch, opt_arrival, 'k*', markersize=12, label=f'Optimal: C3={opt_c3:.2f}')
+        ax.annotate(f'C3={opt_c3:.2f}', (opt_launch, opt_arrival), textcoords="offset points", xytext=(0,10), ha='center', fontweight='bold')
 
         # Formatting
-        ax.set_title(f"Porkchop Plot: {self.dep_body} to {self.arr_body}", fontsize=14)
-        ax.set_xlabel("Launch Date (UTC)", fontsize=12)
+        ax.set_title(f"Porkchop Plot: {self.dep_body} to {self.arr_body}", fontsize=14, pad=20)
+        ax.set_xlabel("Departure Date (UTC)", fontsize=12)
         ax.set_ylabel("Arrival Date (UTC)", fontsize=12)
         
         # Date formatting on axes
-        ax.xaxis.set_major_locator(mdates.MonthLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-        ax.yaxis.set_major_locator(mdates.MonthLocator())
-        ax.yaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        ax.yaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.yaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
         
-        plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
         
-        # Add simple legend
+        # Add legend
         from matplotlib.lines import Line2D
         custom_lines = [Line2D([0], [0], color='blue', lw=2),
-                        Line2D([0], [0], color='gray', lw=2, linestyle='--'),
-                        Line2D([0], [0], color='red', lw=2, linestyle=':')]
-        ax.legend(custom_lines, [r'Departure $C_3$ ($km^2/s^2$)', 'Time of Flight (days)', r'Arrival $V_{\infty}$ (km/s)'])
+                        Line2D([0], [0], color='red', lw=2),
+                        Line2D([0], [0], color='black', marker='*', linestyle='None', markersize=10)]
+        ax.legend(custom_lines, [r'Departure $C_3$ ($km^2/s^2$)', 'Time of Flight (days)', 'Optimal Departure'])
         
         plt.grid(True, alpha=0.3)
         plt.tight_layout()

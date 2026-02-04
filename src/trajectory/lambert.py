@@ -26,9 +26,6 @@ class LambertSolver:
 
         Returns:
             tuple[np.ndarray, np.ndarray]: (v1, v2) - Velocity vectors at r1 and r2 [km/s].
-        
-        Raises:
-            RuntimeError: If the solver fails to converge.
         """
         r1_mag = np.linalg.norm(r1)
         r2_mag = np.linalg.norm(r2)
@@ -48,7 +45,7 @@ class LambertSolver:
         if prograde:
             # Short way
             if cross_12[2] < 0:
-                dnu = 2*np.pi - dnu # Ensure prograde/consistent? 
+                dnu = 2*np.pi - dnu
                 pass
         else:
             # Long way
@@ -69,7 +66,7 @@ class LambertSolver:
             y = r1_mag + r2_mag + A * (z * s_z - 1.0) / np.sqrt(max(c_z, 1e-12))
             
             if y <= 0:
-                # Return a large value or nan to steer solver away from unphysical regions
+                # Return a large value or nan to avoid unphysical regions
                 return np.nan
             
             x = np.sqrt(y / c_z)

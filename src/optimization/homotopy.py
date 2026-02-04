@@ -1,7 +1,6 @@
 import numpy as np
 from typing import Callable, List, Dict
 from .indirect import IndirectSolver
-from .multiple_shooting import MultipleShootingSolver
 
 def solve_minimum_fuel_with_homotopy(solver, 
                                      t_guess, 
@@ -15,7 +14,8 @@ def solve_minimum_fuel_with_homotopy(solver,
     Solves a minimum fuel problem by strictly reducing epsilon in the smoothed cost L = weight * sqrt(u^2 + eps^2).
     
     Args:
-        solver: An instance of IndirectSolver or MultipleShootingSolver.
+        solver: An instance of IndirectSolver.
+
         t_guess: Initial mesh.
         y_guess: Initial guess.
         bc_func: Boundary condition function.
@@ -50,7 +50,8 @@ def solve_minimum_fuel_with_homotopy(solver,
              res = solver.solve(current_t, current_y, bc_func, verbose=0, tol=1e-4)
              
              if res.success:
-                 print(f"  Converged. Max residual? (Check solver output)")
+                 max_res = np.max(res.rms_residuals) if hasattr(res, 'rms_residuals') and len(res.rms_residuals) > 0 else 'N/A'
+                 print(f"  Converged. Max residual: {max_res}")
                  last_res = res
                  current_t = res.x
                  current_y = res.y
@@ -65,3 +66,50 @@ def solve_minimum_fuel_with_homotopy(solver,
             
     print("\n=== Homotopy Complete ===")
     return last_res
+
+def analyze_switching_function(t, switching_func_vals, tol=1e-3):
+    """
+    Analyzes the switching function S(t) to detect switch points (zeros).
+    
+    Args:
+        t: Time grid.
+        switching_func_vals: Values of S(t).
+        
+    Returns:
+        List of switch times (approximate).
+    """
+    switch_times = []
+    
+    # Simple sign change detection
+    signs = np.sign(switching_func_vals)
+    sign_changes = np.where(np.diff(signs) != 0)[0]
+    
+    for idx in sign_changes:
+        # Linear interpolation to find zero
+        t1, t2 = t[idx], t[idx+1]
+        s1, s2 = switching_func_vals[idx], switching_func_vals[idx+1]
+        
+        if s1 == s2: continue # Should not happen if sign changed
+        
+        # t_zero = t1 + (0 - s1) * (t2 - t1) / (s2 - s1)
+        t_zero = t1 - s1 * (t2 - t1) / (s2 - s1)
+        switch_times.append(t_zero)
+        
+    return switch_times
+
+def plot_switching_function(t, switching_func_vals, title="Switching Function"):
+    """
+    Helper to visualize switching function.
+    """
+    try:
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.plot(t, switching_func_vals)
+        plt.axhline(0, color='r', linestyle='--')
+        plt.title(title)
+        plt.xlabel("Time")
+        plt.ylabel("S(t)")
+        plt.grid(True)
+        plt.show()
+    except ImportError:
+        pass

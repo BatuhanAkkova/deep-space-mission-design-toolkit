@@ -1,35 +1,51 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import root
-from typing import Callable, List, Union
-from .indirect import IndirectSolver
+from typing import Callable, List, Optional, Union
 
-class MultipleShootingSolver(IndirectSolver):
-    """
-    Solves the Indirect OCP using Multiple Shooting.
-    Inherits from IndirectSolver to reuse symbolic derivation of PMP conditions.
-    """
-    def __init__(self, ocp):
-        super().__init__(ocp)
+class MultipleShootingSolver:
 
-    def solve(self, t_guess, y_guess, bc_func: Callable, verbose=2, tol=1e-6, max_nodes=None, free_time=False, events=None):
+    def __init__(self, dynamics: Callable[[float, np.ndarray, Optional[np.ndarray]], np.ndarray]):
+        """
+        Args:
+            dynamics: Callable f(t, y, p) -> dy/dt.
+        """
+        self.dynamics = dynamics
+
+    def solve(self, 
+              t_guess: np.ndarray, 
+              y_guess: np.ndarray, 
+              bc_func: Callable[[np.ndarray, np.ndarray, Optional[np.ndarray]], np.ndarray],
+              verbose: int = 2, 
+              tol: float = 1e-6, 
+              max_nodes: Optional[int] = None, 
+              free_time: bool = False, 
+              events: Optional[List[Callable]] = None):
         """
         Solves the TPBVP using Multiple Shooting.
 
         Args:
-            t_guess: Initial mesh.
-            y_guess: Initial guess.
-            bc_func: Boundary condition function bc(y_0, y_f, p). 
-            free_time: If True, optimizes for unknown parameters (assumed [tf]).
-            events: Optional. List of callables, one per segment (or None).
-                    If events[i] is provided, segment i integration stops at the event.
+            t_guess: Initial time mesh (nodes).
+            y_guess: Initial guess for states at each node (num_vars, num_nodes).
+            bc_func: Boundary condition function bc(y_0, y_f, p).
+            verbose: Verbosity level.
+            tol: Integration tolerance.
+            max_nodes: Max iterations for root finder.
+            free_time: If True, optimizes for unknown tf (assumed p[0]).
+            events: List of event functions for each segment (optional).
+        
+        Returns:
+            Result object.
         """
-        if self._numeric_dynamics is None:
-            raise RuntimeError("System not lambdified. Call derive_conditions() and lambdify_system() first.")
-
+        
         # 1. Setup
         num_nodes = len(t_guess)
         num_segments = num_nodes - 1
+        
+        # Check y_guess shape
+        if y_guess.shape[1] != num_nodes:
+            raise ValueError(f"y_guess shape {y_guess.shape} must match number of nodes {num_nodes}.")
+            
         num_vars = y_guess.shape[0]
         
         # P handling
@@ -43,13 +59,11 @@ class MultipleShootingSolver(IndirectSolver):
             
         num_params = len(p_guess)
 
-        # Flatten Z = [Y_0, ..., Y_N-1, p]
-        Z_nodes = y_guess.T.flatten() 
+        # Flatten Z = [y_0, y_1, ..., y_N-1, p]
+        Z_nodes = y_guess.T.flatten()
         Z0 = np.concatenate((Z_nodes, p_guess))
 
-        # 2. Integration Function
-        ode_fun = self.get_ode_fun(free_time=free_time)
-
+        # 2. Shooting Function
         def shooting_function(Z):
             # Extract params
             if num_params > 0:
@@ -59,75 +73,86 @@ class MultipleShootingSolver(IndirectSolver):
                 p_current = []
                 Y_flat = Z
             
-            # Reshape Y
+            # Reshape Y back to (n_nodes, n_vars)
             Y_nodes = Y_flat.reshape((num_nodes, num_vars))
             
             residuals = []
             
-            # 2.1 Integrate each segment
+            # Loop over segments
             for i in range(num_segments):
-                t_start = t_grid[i]
-                t_end = t_grid[i+1]
+                t_start_fraction = t_grid[i]
+                t_end_fraction = t_grid[i+1]
                 
-                # If leg ends on event, t_end is just a max horizon, integration stops earlier
-                event_i = events[i] if events and i < len(events) else None
+                # Determine integration times
+                if free_time:
+                    tf_val = p_current[0]
+                    t_start = t_start_fraction * tf_val
+                    t_end = t_end_fraction * tf_val
+                    
+                    if tf_val < 1e-6:
+                        pass
+                else:
+                    t_start = t_grid[i]
+                    t_end = t_grid[i+1]
                 
                 y_start = Y_nodes[i]
-                y_next_guess = Y_nodes[i+1]
+                y_target = Y_nodes[i+1]
                 
-                # Propagate
-                def step_fun(t, y):
-                    return ode_fun(t, y, p_current)
-                
-                # Setup events for solve_ivp
+                # Event handling
+                event_i = events[i] if events and i < len(events) else None
                 ivp_events = [event_i] if event_i else None
-                if ivp_events:
-                     if not hasattr(event_i, 'terminal'):
-                         event_i.terminal = True
-                     
-                sol = solve_ivp(step_fun, (t_start, t_end), y_start, t_eval=[t_end] if not event_i else None, 
-                                events=ivp_events, rtol=tol, atol=tol)
+                if ivp_events and not hasattr(event_i, 'terminal'):
+                     event_i.terminal = True
                 
-                if not sol.success:
-                    return np.ones_like(Z) * 1e6
-                
-                # Get final state
-                if event_i and sol.t_events and len(sol.t_events[0]) > 0:
-                    # Stopped at event
-                    y_end_integrated = sol.y_events[0][0]
-                    pass
-                else:
-                    # Reached t_end
-                    y_end_integrated = sol.y[:, -1]
-                
-                # Defect
-                defect = y_end_integrated - y_next_guess
-                residuals.append(defect)
+                # Integrate
+                try:
+                    # solve_ivp expects fun(t, y)
+                    fun = lambda t, y: self.dynamics(t, y, p_current)
+                    
+                    sol = solve_ivp(fun, (t_start, t_end), y_start, 
+                                    t_eval=[t_end] if not event_i else None,
+                                    events=ivp_events, rtol=tol, atol=tol, method='DOP853')
+                    
+                    if not sol.success:
+                        # Large defect
+                        return np.ones_like(Z) * 1e3
+                    
+                    # Get end state
+                    if event_i and sol.t_events and len(sol.t_events[0]) > 0:
+                        y_end_integrated = sol.y_events[0][0]
+                    else:
+                        y_end_integrated = sol.y[:, -1]
+                    
+                    # Defect: y_integrated - y_guess_next
+                    defect = y_end_integrated - y_target
+                    residuals.append(defect)
+                    
+                except Exception:
+                     return np.ones_like(Z) * 1e3
+
+            residuals = np.array(residuals).flatten()
             
-            residuals = np.array(residuals).flatten() 
-            
-            # 2.2 Boundary Conditions
+            # Boundary Conditions
             y_initial = Y_nodes[0]
             y_final = Y_nodes[-1]
             
             bc_res = bc_func(y_initial, y_final, p_current)
             
             total_residuals = np.concatenate((residuals, bc_res))
-            
             return total_residuals
 
         # 3. Solve
         if verbose > 0:
-            print(f"Starting Multiple Shooting (Free Time={free_time}, Events={events is not None})...")
+            print(f"Starting Multiple Shooting (Free Time={free_time}, Nodes={num_nodes})...")
             
-        sol = root(shooting_function, Z0, method='lm', options={'maxiter': 100 if max_nodes is None else max_nodes}) 
+        sol = root(shooting_function, Z0, method='lm', options={'maxiter': 100 if max_nodes is None else max_nodes})
         
         if verbose > 0:
             print(f"Multiple Shooting {'Converged' if sol.success else 'Failed'}: {sol.message}")
             if hasattr(sol, 'fun'):
                 print(f"Final residual norm: {np.linalg.norm(sol.fun)}")
-
-        # 4. Format Output
+                
+        # 4. Result
         if num_params > 0:
             p_sol = sol.x[-num_params:]
             Y_sol_flat = sol.x[:-num_params]
@@ -135,20 +160,21 @@ class MultipleShootingSolver(IndirectSolver):
             p_sol = None
             Y_sol_flat = sol.x
             
-        Y_sol = Y_sol_flat.reshape((num_nodes, num_vars)).T 
+        Y_sol = Y_sol_flat.reshape((num_nodes, num_vars)).T # (n_vars, n_nodes)
         
-        # Denormalize time if needed
+        # Reconstruct Time
         if free_time and p_sol is not None:
-             t_final_res = t_grid * p_sol[0]
+            t_sol = t_grid * p_sol[0]
         else:
-             t_final_res = t_guess
-        
-        return Result(t_final_res, Y_sol, p_sol, sol.success, sol.message)
+            t_sol = t_guess
+            
+        return Result(t_sol, Y_sol, p_sol, sol.success, sol.message, sol.fun)
 
 class Result:
-    def __init__(self, t, y, p, success, message):
+    def __init__(self, t, y, p, success, message, fun=None):
         self.x = t
         self.y = y
         self.p = p
         self.success = success
         self.message = message
+        self.fun = fun

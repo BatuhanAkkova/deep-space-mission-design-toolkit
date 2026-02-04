@@ -172,7 +172,7 @@ class NBodyDynamics:
             raise ValueError(f"State vector length {len(state)} not supported. Expected 6 or 42.")
 
     def propagate(self, initial_state: np.ndarray, t_span: tuple[float, float], 
-                  max_step: float = np.inf, rtol: float = 1e-9, atol: float = 1e-12, stm: bool = False):
+                  max_step: float = np.inf, rtol: float = 1e-9, atol: float = 1e-12, stm: bool = False, **kwargs):
         """
         Propagate the state from t_span[0] to t_span[1].
         
@@ -183,6 +183,7 @@ class NBodyDynamics:
             rtol (float): Relative tolerance.
             atol (float): Absolute tolerance.
             stm (bool): If True, propagate and return 6x6 STM appended to state.
+            **kwargs: Additional arguments passed to solve_ivp (e.g., events).
             
         Returns:
             scipy.integrate.OdeResult: Integration result. 
@@ -198,7 +199,6 @@ class NBodyDynamics:
             phi0 = np.eye(6).flatten()
             y0 = np.concatenate((initial_state, phi0))
             
-        # By default, we want dense output to interpolate later if needed
         sol = solve_ivp(
             fun=self.equations_of_motion,
             t_span=t_span,
@@ -207,6 +207,7 @@ class NBodyDynamics:
             rtol=rtol,
             atol=atol,
             max_step=max_step,
-            dense_output=True
+            dense_output=True,
+            **kwargs
         )
         return sol

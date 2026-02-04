@@ -2,7 +2,7 @@
 __pycache__
 data/
 .agent
-mission_design_conventions.md
 flyby.md
 roadmap.md
 EXAMPLES.md
+REPO_STRUCTURE.md

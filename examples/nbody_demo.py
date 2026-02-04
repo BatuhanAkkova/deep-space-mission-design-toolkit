@@ -28,7 +28,6 @@ def kepler_step(r0, v0, mu, dt):
     sol = solve_ivp(two_body, (0, dt), np.concatenate((r0, v0)), rtol=1e-12, atol=1e-13)
     return sol.y[:, -1]
 
-
 def differentiate_correction(nbody, initial_state_helio, t_span, r_target, et_arrival):
     """
     Performs differential correction (single shooting) to target a position.

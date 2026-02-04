@@ -1,294 +1,182 @@
-import numpy as np
 import sympy as sp
+import numpy as np
 import matplotlib.pyplot as plt
+
+# Adjust path to import src if needed, assuming run from root
 import sys
 import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from optimization.ocp import OptimalControlProblem
+from optimization.indirect import IndirectSolver
 
-from src.optimization.ocp import OptimalControlProblem
-from src.optimization.indirect import IndirectSolver
-
-def solve_simple_double_integrator():
+def run_earth_mars_transfer():
     """
-    Problem:
-    Minimize J = 0.5 * integral(u^2) dt from t=0 to t=1
-    Subject to:
-    x_dot = v
-    v_dot = u
-    BCs:
-    x(0) = 0, v(0) = 0
-    x(1) = 1, v(1) = 0
-    
-    Analytical Solution:
-    u(t) = 12t - 6
-    x(t) = 2t^3 - 3t^2 + t? No wait.
-    The Hamiltonian is H = 0.5*u^2 + lam_x * v + lam_v * u
-    dH/du = u + lam_v = 0 => u = -lam_v
-    
-    lam_x_dot = -dH/dx = 0 => lam_x = c1
-    lam_v_dot = -dH/dv = -lam_x => lam_v = -c1*t + c2
-    
-    u = c1*t - c2
-    v_dot = c1*t - c2 => v = 0.5*c1*t^2 - c2*t + c3
-    x_dot = v => x = ...
+    Demonstrates an indirect optimization for a 2D Earth-Mars Heliocentric Transfer.
+    Unit System: Canonical (mu_sun = 1, r_earth = 1 AU)
     """
     print("Setting up Optimal Control Problem...")
     
     ocp = OptimalControlProblem()
-    ocp.set_time_variable('t')
     
-    # States: Position (x), Velocity (v)
-    x, v = ocp.define_states(['x', 'v'])
+    # --- 1. Define Variables ---
+    # State: [r, theta, vr, vt]
+    # r: radius (AU)
+    # theta: polar angle (rad)
+    # vr: radial velocity
+    # vt: tangential velocity
+    r, theta, vr, vt = ocp.define_states(['r', 'theta', 'vr', 'vt'])
     
-    # Control: Acceleration (u)
-    u_ctrl = ocp.define_controls(['u'])[0]
+    # Control: [ur, ut] (Radial and Tangential acceleration)
+    ur, ut = ocp.define_controls(['ur', 'ut'])
     
-    # Dynamics: x_dot = v, v_dot = u
-    ocp.set_dynamics([v, u_ctrl])
+    # Parameters
+    # None for this simple case, use fixed constants
     
-    # Cost: L = 0.5 * u^2
-    ocp.set_running_cost(0.5 * u_ctrl**2)
+    # --- 2. Dynamics (2D Polar Two-Body Problem + Control) ---
+    # r_dot = vr
+    # theta_dot = vt / r
+    # vr_dot = vt^2 / r - 1/r^2 + ur  (mu=1)
+    # vt_dot = -vr*vt / r + ut
     
-    # Initialize Solver
+    dynamics = [
+        vr,
+        vt / r,
+        vt**2 / r - 1/r**2 + ur,
+        -vr * vt / r + ut
+    ]
+    ocp.set_dynamics(dynamics)
+    
+    # --- 3. Objective ---
+    # Minimize Energy: J = 0.5 * integral(ur^2 + ut^2) dt
+    metrics_scaling = 1.0 
+    ocp.set_running_cost(0.5 * (ur**2 + ut**2))
+    
+    # --- 4. Boundary Conditions ---
+    # Start: Earth (Circular Orbit, r=1, v=1)
+    # End: Mars (Circular Orbit, r=1.524, v=1/sqrt(1.524))
+    
+    r_earth = 1.0
+    v_earth = 1.0 # sqrt(mu/r) = sqrt(1/1)
+    
+    r_mars = 1.524
+    v_mars = 1.0 / np.sqrt(r_mars)
+    
+    # Time of flight guess (Hohmann transfer is approx pi * sqrt(a_trans^3))
+    # a_trans = (1 + 1.524)/2 = 1.262
+    # tof_hohmann = pi * 1.262^1.5 approx 4.49 canonical time units
+    # We will fix time for this demo to ensure convergence
+    tf_fixed = 4.5
+    
+    print(f"Targeting Transfer time: {tf_fixed:.2f} TU")
+    
+    x0 = np.array([r_earth, 0.0, 0.0, v_earth])
+    
+    # Target state: [r_mars, free_theta, 0.0, v_mars]
+    # We leave theta free (phasing is optimized) by setting it to NaN in the solver interface
+    xf = np.array([r_mars, np.nan, 0.0, v_mars]) 
+    
+    # --- 5. Indirect Solution ---
     solver = IndirectSolver(ocp)
     
-    print("Deriving necessary conditions symbolically...")
+    print("Deriving Necessary Conditions (Symbolic)...")
     solver.derive_conditions()
     
-    print("Costate Equations:")
-    for eq in solver.costate_eqs:
-        print(eq)
-        
-    print("\nControl Equation:")
-    print(solver.control_eqs)
-    
-    print("Compiling numerical functions...")
+    print("Compiling Numerical Functions...")
     solver.lambdify_system()
     
-    # Define Boundary Conditions for solve_bvp
-    # y = [x, v, lam_x, lam_v]
-    def bc(ya, yb):
-        # ya = y(0), yb = y(tf)
-        # x(0)=0, v(0)=0
-        # x(tf)=1, v(tf)=0
-        
-        # Residuals must be 0
-        return np.array([
-            ya[0] - 0.0,
-            ya[1] - 0.0,
-            yb[0] - 1.0,
-            yb[1] - 0.0
-        ])
+    print("Generating Boundary Condition Function...")
+    # Create BC function. Free time = False for now.
+    bc_func = solver.create_bc_function(x0, xf, free_time=False)
     
-    # Initial Guess
-    t_span = np.linspace(0, 1, 100)
-    # y shape: (4, 100)
-    # Guess zeros
-    y_guess = np.zeros((4, len(t_span)))
-    # Maybe linear guess for x?
-    y_guess[0, :] = t_span 
-    
+    # --- 6. Initial Guess ---
+    # Linear guess for states, small constant for costates
     print("Solving BVP...")
-    res = solver.solve(t_span, y_guess, bc)
+    t_guess = np.linspace(0, tf_fixed, 50)
+    
+    # Naive initialization
+    # r goes 1 -> 1.5
+    # theta goes 0 -> pi (approx)
+    # vr goes 0 -> 0
+    # vt goes 1 -> 0.8
+    y_guess = np.zeros((8, len(t_guess)))
+    
+    y_guess[0, :] = np.linspace(r_earth, r_mars, len(t_guess)) # r
+    y_guess[1, :] = np.linspace(0, 3.14, len(t_guess))         # theta
+    y_guess[2, :] = 0.0                                        # vr
+    y_guess[3, :] = np.linspace(v_earth, v_mars, len(t_guess)) # vt
+    
+    # Costates guess:
+    y_guess[4:, :] = 0.01 
+    
+    # Solve
+    res = solver.solve(t_guess, y_guess, bc_func, verbose=2, tol=1e-4) # Fixed time in this call as free_time=False default
     
     if res.success:
-        print("Success!")
-        print(res.message)
-        
-        # Plot results
-        t = res.x
-        x_sol = res.y[0]
-        v_sol = res.y[1]
-        lam_x = res.y[2]
-        lam_v = res.y[3]
-        
-        # Calculate control u = -lam_v
-        u_sol = -lam_v
-        
-        plt.figure(figsize=(10, 8))
-        
-        plt.subplot(3, 1, 1)
-        plt.plot(t, x_sol, label='Position (x)')
-        plt.plot(t, v_sol, label='Velocity (v)')
-        plt.ylabel('States')
-        plt.legend()
-        plt.grid(True)
-        plt.title('Double Integrator Bang-Bang (Continuous) Solution')
-        
-        plt.subplot(3, 1, 2)
-        plt.plot(t, u_sol, 'r-', label='Control (u)')
-        plt.ylabel('Control')
-        plt.legend()
-        plt.grid(True)
-        
-        plt.subplot(3, 1, 3)
-        plt.plot(t, lam_x, label='lambda_x')
-        plt.plot(t, lam_v, label='lambda_v')
-        plt.ylabel('Costates')
-        plt.xlabel('Time')
-        plt.legend()
-        plt.grid(True)
-        
-        plt.tight_layout()
-        plt.show()
-        
+        print("Optimization Successful!")
+        plot_results(res)
     else:
-        print("Optimization Failed:")
+        print("Optimization Failed.")
         print(res.message)
 
-def solve_with_homotopy_demo():
-    print("\n--- Homotopy Demo ---")
-    print("Problem: Minimize J = 0.5 * alpha * u^2, varying alpha.")
+def plot_results(res):
+    t = res.x
+    y = res.y
+    r = y[0]
+    theta = y[1]
+    vr = y[2]
+    vt = y[3]
     
-    ocp = OptimalControlProblem()
-    ocp.set_time_variable('t')
-    x, v = ocp.define_states(['x', 'v'])
-    u_ctrl = ocp.define_controls(['u'])[0]
+    # Reconstruct Controls
+    lam_vr = y[6]
+    lam_vt = y[7]
+    ur = -lam_vr
+    ut = -lam_vt
     
-    # Define parameter alpha
-    alpha = ocp.define_parameters(['alpha'])[0]
+    # Convert polar to cartesian for plot
+    x_pos = r * np.cos(theta)
+    y_pos = r * np.sin(theta)
     
-    ocp.set_dynamics([v, u_ctrl])
-    ocp.set_running_cost(0.5 * alpha * u_ctrl**2)
+    # 1. Trajectory Plot
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
     
-    solver = IndirectSolver(ocp)
-    solver.derive_conditions()
-    solver.lambdify_system()
+    # Plot Sun
+    plt.plot(0, 0, 'yo', markersize=10, label='Sun')
     
-    # BCs: Rest-to-rest from 0 to 1
-    def bc(ya, yb):
-        return np.array([ya[0], ya[1], yb[0]-1.0, yb[1]])
-
-    t_span = np.linspace(0, 1, 50)
-    y_guess = np.zeros((4, len(t_span)))
-    y_guess[0, :] = t_span
+    # Plot Earth Orbit (approx)
+    theta_draw = np.linspace(0, 2*np.pi, 100)
+    plt.plot(np.cos(theta_draw), np.sin(theta_draw), 'b--', alpha=0.3, label='Earth Orbit')
     
-    # Homotopy: Decrease alpha from 10 to 1
-    alphas = [10.0, 5.0, 2.0, 1.0]
+    # Plot Mars Orbit (approx)
+    r_m = 1.524
+    plt.plot(r_m*np.cos(theta_draw), r_m*np.sin(theta_draw), 'r--', alpha=0.3, label='Mars Orbit')
     
-    # Initial solve with alpha=10
-    solver.set_parameter_value('alpha', 10.0)
-    base_res = solver.solve(t_span, y_guess, bc)
+    # Transfer
+    plt.plot(x_pos, y_pos, 'k-', linewidth=2, label='Transfer')
+    plt.plot(x_pos[0], y_pos[0], 'bo', label='Start')
+    plt.plot(x_pos[-1], y_pos[-1], 'rx', label='End')
     
-    if not base_res.success:
-        print("Base solve failed.")
-        return
-
-    # Run homotopy
-    final_res = solver.solve_with_homotopy(base_res.x, base_res.y, bc, 'alpha', alphas, verbose=0)
+    plt.axis('equal')
+    plt.grid(True)
+    plt.legend()
+    plt.title('Earth-Mars Low-Thrust Transfer (Min Energy)')
     
-    if final_res and final_res.success:
-        print("Homotopy Success!")
-        # Check explicit control eq: u = -lambda_v / alpha
-        # For alpha=1, should match previous result roughly.
-    else:
-        print("Homotopy Failed.")
-
-def solve_constrained_demo():
-    print("\n--- Constrained Demo ---")
-    print("Problem: Minimize Energy with Velocity Constraint v <= 0.3")
+    # 2. Control Profile
+    plt.subplot(1, 2, 2)
+    thrust_mag = np.sqrt(ur**2 + ut**2)
+    plt.plot(t, thrust_mag, 'r-', label='Combined Thrust')
+    plt.plot(t, ur, 'g--', label='Radial Control')
+    plt.plot(t, ut, 'b--', label='Tangential Control')
     
-    ocp = OptimalControlProblem()
-    ocp.set_time_variable('t')
-    x, v = ocp.define_states(['x', 'v'])
-    u_ctrl = ocp.define_controls(['u'])[0]
+    plt.xlabel('Time (Canonical Units)')
+    plt.ylabel('Control Magnitude (accel)')
+    plt.grid(True)
+    plt.legend()
+    plt.title('Control Profile')
     
-    penalty_weight = ocp.define_parameters(['rho'])[0]
-    
-    ocp.set_dynamics([v, u_ctrl])
-    ocp.set_running_cost(0.5 * u_ctrl**2)
-    
-    # Constraint: v <= 1.2  =>  v - 1.2 <= 0
-    # Note: Unconstrained max v is 1.5. Distance=1 in Time=1 requires v_avg=1.
-    # v <= 1.2 is feasible and active.
-    ocp.add_path_constraint(v - 1.2, penalty_weight)
-    
-    solver = IndirectSolver(ocp)
-    solver.derive_conditions()
-    solver.lambdify_system()
-    
-    def bc(ya, yb):
-        return np.array([ya[0], ya[1], yb[0]-1.0, yb[1]])
-
-    t_span = np.linspace(0, 1, 100)
-    y_guess = np.zeros((4, len(t_span)))
-    y_guess[0, :] = t_span
-    
-    # Increase penalty weight
-    rhos = [0.0, 10.0, 100.0, 1000.0, 5000.0]
-    
-    solver.set_parameter_value('rho', 0.0)
-    res = solver.solve(t_span, y_guess, bc)
-    
-    if not res.success:
-        print("Initial solve failed")
-        return
-        
-    print(f"Unconstrained Max Velocity: {np.max(res.y[1]):.4f}")
-
-    # Homotopy
-    final_res = solver.solve_with_homotopy(res.x, res.y, bc, 'rho', rhos, verbose=0)
-    
-    if final_res and final_res.success:
-        print("Constrained Optimization Success!")
-        v_max = np.max(final_res.y[1])
-        print(f"Max Velocity: {v_max:.4f} (Constraint: <= 1.2)")
-    else:
-        print("Constrained Optimization Failed.")
-
-def solve_orbit_transfer_demo():
-    print("\n--- Non-Linear Orbit Transfer Demo (1D) ---")
-    print("Problem: Vertical ascent with Gravity mu/r^2 (Non-linear).")
-    print("Minimize J = 0.5 * integral(u^2) dt")
-    print("Dynamics: r_dot = v, v_dot = u - 1/r^2")
-    
-    ocp = OptimalControlProblem()
-    ocp.set_time_variable('t')
-    r, v = ocp.define_states(['r', 'v'])
-    u = ocp.define_controls(['u'])[0]
-    
-    # Dynamics (Canonical units: mu=1)
-    # 1D gravity: -1/r^2
-    ocp.set_dynamics([v, u - 1/r**2])
-    
-    ocp.set_running_cost(0.5 * u**2)
-    
-    solver = IndirectSolver(ocp)
-    solver.derive_conditions()
-    solver.lambdify_system()
-    
-    # BCs: Rest to Rest, r=1 to r=1.5
-    def bc(ya, yb):
-        return np.array([
-            ya[0] - 1.0, # r0 = 1
-            ya[1] - 0.0, # v0 = 0
-            yb[0] - 1.5, # rf = 1.5
-            yb[1] - 0.0  # vf = 0
-        ])
-    
-    # Fixed time tf = 5.0 (needs to be long enough to reach 1.5 with reasonable thrust)
-    tf = 5.0
-    t_span = np.linspace(0, tf, 50)
-    
-    # Initial Guess
-    y_guess = np.zeros((4, len(t_span)))
-    y_guess[0, :] = np.linspace(1.0, 1.5, len(t_span)) # Linear r guess
-    
-    print("Solving Non-linear BVP...")
-    res = solver.solve(t_span, y_guess, bc, tol=1e-8)
-    
-    if res.success:
-        print("Orbit Transfer Success!")
-        print(f"Iterations: {res.niter}") # Hopefully > 1
-        print(f"Max Residual: {np.max(res.rms_residuals)}")
-    else:
-        print("Orbit Transfer Failed.")
-        print(res.message)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
-    solve_simple_double_integrator()
-    solve_with_homotopy_demo()
-    solve_constrained_demo()
-    solve_orbit_transfer_demo()
+    run_earth_mars_transfer()

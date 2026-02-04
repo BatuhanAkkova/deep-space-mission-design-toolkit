@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from src.spice.manager import spice_manager
-from src.dynamics.perturbations import J2Perturbation, SSRPerturbation, DragPerturbation
+from src.dynamics.perturbations import J2Gravity, SRP, Drag
 from src.dynamics.nbody import NBodyDynamics
 
 class TestPerturbations:
@@ -29,7 +29,7 @@ class TestPerturbations:
 
     def test_j2_acceleration(self):
         # J2 acceleration at equator should be non-zero
-        j2_pert = J2Perturbation('EARTH', 'ECLIPJ2000', 'IAU_EARTH')
+        j2_pert = J2Gravity('EARTH', 'ECLIPJ2000', 'IAU_EARTH')
         if j2_pert.J2 == 0:
             pytest.skip("J2 constant not found for EARTH")
             
@@ -46,7 +46,7 @@ class TestPerturbations:
         area = 10.0 # m^2
         mass = 1000.0 # kg
         cr = 1.8
-        srp = SSRPerturbation(area, mass, cr, 'SUN')
+        srp = SRP(area, mass, cr, 'SUN')
         
         t = 0.0
         r_sc = np.array([1.5e8, 0.0, 0.0]) # 1 AU
@@ -65,7 +65,7 @@ class TestPerturbations:
     def test_nbody_integration_with_j2(self):
         # Test full integration wrapper
         dynamics = NBodyDynamics(['EARTH'], 'ECLIPJ2000', 'EARTH', 
-                                 perturbations=[J2Perturbation('EARTH')])
+                                 perturbations=[J2Gravity('EARTH')])
         
         t_span = (0, 1000)
         state0 = np.array([7000.0, 0.0, 0.0, 0.0, 7.5, 0.0]) # LEO
@@ -77,7 +77,7 @@ class TestPerturbations:
     def test_stm_integration_with_j2_no_partials(self):
         # Currently J2 partials are zero, so STM should just propagate but not reflect J2 variations perfectly
         dynamics = NBodyDynamics(['EARTH'], 'ECLIPJ2000', 'EARTH', 
-                                 perturbations=[J2Perturbation('EARTH', 'ECLIPJ2000', 'IAU_EARTH')])
+                                 perturbations=[J2Gravity('EARTH', 'ECLIPJ2000', 'IAU_EARTH')])
         
         state0 = np.array([7000.0, 0.0, 0.0, 0.0, 7.5, 0.0])
         sol = dynamics.propagate(state0, (0, 100), stm=True)

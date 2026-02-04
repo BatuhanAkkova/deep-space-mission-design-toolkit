@@ -309,7 +309,7 @@ class FlybyCorrector:
     def target_b_plane(self, state0: np.ndarray, epoch: float, 
                        target_br: float, target_bt: float, 
                        t_encounter: float = None, dt_max: float = 30*86400,
-                       tol: float = 1.0) -> tuple[np.ndarray, bool]:
+                       tol: float = 1.0, flyby_body: str = None) -> tuple[np.ndarray, bool]:
         """
         Differential correction to achieve target B-plane parameters.
         Adjusts initial velocity.
@@ -322,6 +322,7 @@ class FlybyCorrector:
             t_encounter (float): Estimated time of encounter (optional). 
             dt_max (float): Propagation duration [s].
             tol (float): Tolerance in B-plane distance [km].
+            flyby_body (str): Name of the flyby body (optional). If None, tries to use index 1.
             
         Returns:
             tuple: (corrected_state0, success)
@@ -330,12 +331,18 @@ class FlybyCorrector:
         max_iter = 10
         current_state = state0.copy()
         
-        # Assume 2nd body in NBody list is the target.
-        if len(self.nbody.bodies) < 2:
-            raise ValueError("NBody model must have at least 2 bodies (Central + Flyby Target).")
+        # Determine flyby body
+        if flyby_body:
+            target_body = flyby_body
+        elif len(self.nbody.bodies) >= 2:
+            target_body = self.nbody.bodies[1]
+        else:
+            raise ValueError("NBody model must have at least 2 bodies or flyby_body must be specified.")
         
-        flyby_body = self.nbody.bodies[1] 
-        mu_flyby = self.nbody.mus[flyby_body]
+        mu_flyby = self.nbody.mus.get(target_body)
+        if mu_flyby is None:
+             mu_flyby = spice_manager.get_mu(target_body)
+
         central_body = self.nbody.central_body
         
         # Integration span
@@ -360,7 +367,7 @@ class FlybyCorrector:
             t_f = sol.t[-1]
             
             # Get Relative State to Flyby Body
-            state_body = spice_manager.get_body_state(flyby_body, central_body, t_f, self.nbody.frame)
+            state_body = spice_manager.get_body_state(target_body, central_body, t_f, self.nbody.frame)
             r_body = state_body[0:3]
             v_body = state_body[3:6]
             
@@ -407,17 +414,24 @@ class FlybyCorrector:
             # 4. Update V0
             # delta_v = - pinv(J) * error
             # Check condition
-            if np.linalg.cond(J) > 1e12:
-                print("Singular Jacobian.")
+            cond = np.linalg.cond(J)
+            if cond > 1e12:
+                print(f"Singular Jacobian. Cond={cond}")
                 return current_state, False
                 
-            delta_v0 = -np.linalg.pinv(J) @ b_err
+            jt_inv = np.linalg.pinv(J)
+            delta_v0 = -jt_inv @ b_err
+            
+            # Debug shapes if error expected
+            # print(f"DEBUG: J={J.shape}, J_inv={jt_inv.shape}, b_err={b_err.shape}, delta_v0={delta_v0.shape}")
             
             # Limit step size
             dv_mag = np.linalg.norm(delta_v0)
             if dv_mag > 0.5: # Limit to 500 m/s per step to avoid non-linearity explosions
                 delta_v0 = delta_v0 * (0.5 / dv_mag)
                 
-            current_state[3:6] += delta_v0
+            current_state[3:6] += delta_v0.flatten()
+            
+        return current_state, False
             
         return current_state, False

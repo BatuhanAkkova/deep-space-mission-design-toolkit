@@ -81,7 +81,7 @@ class IndirectSolver:
         # Dynamics vector [x_dot..., lam_dot...]
         dynamics_exprs = self.state_eqs + self.costate_eqs
         
-        # We replace f(t) with dummy symbols for lambdification
+        # Replace f(t) with dummy symbols for lambdification
         def get_name(v):
             return v.func.name if hasattr(v, 'func') else v.name
 
@@ -100,7 +100,6 @@ class IndirectSolver:
         H_expr = H_optimal.subs(subs_map)
         
         self._numeric_H = sp.lambdify((t_sym, dummy_vars, params), H_expr, modules='numpy')
-
 
     def get_ode_fun(self, free_time=False):
         """
