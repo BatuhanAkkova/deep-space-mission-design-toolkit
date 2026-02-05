@@ -1,4 +1,4 @@
-# 🌌 Deep Space Mission Design Toolkit
+# Deep Space Mission Design Toolkit
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -7,21 +7,21 @@ A high-fidelity Python toolkit for interplanetary trajectory analysis, optimizat
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-### 🔭 High-Fidelity Dynamics
+### High-Fidelity Dynamics
 -   **N-Body Propagator**: Full numerical integration using SPICE ephemeris data (Sun, Planets, Moon).
 -   **Perturbations**: Realistic force models including Solar Radiation Pressure (SRP), Atmospheric Drag, and J2 Zonal Harmonics.
     -   *Note: J2 gravity requires SPICE kernels with specific body constants (e.g., `J2E` for Earth).*
 -   **Variational Equations**: Automatic State Transition Matrix (STM) propagation for navigation and optimization.
 
-### 🛠️ Mission Design & Targeting
+### Mission Design & Targeting
 -   **B-Plane Targeting**: Precise targeting of gravity assist flyby parameters (B·R, B·T).
 -   **Lambert Solver**: Robust solution of the two-body boundary value problem (Gauss method).
 -   **Porkchop Plotter**: Global launch window analysis identifying C3 energy and Time-of-Flight (TOF) optima.
 -   **Tisserand Analysis**: Visualizing gravity assist opportunities and energy changes between bodies.
 
-### 📊 Advanced Optimization
+### Advanced Optimization
 This toolkit provides multiple pathways for solving trajectory optimization problems:
 -   **Symbolic Indirect Methods**: Transform Optimal Control Problems (OCP) into TPBVPs via Pontryagin's Minimum Principle with automated symbolic derivation.
 -   **Numerical Shooting Methods**:
@@ -32,7 +32,7 @@ This toolkit provides multiple pathways for solving trajectory optimization prob
 
 ---
 
-## 🛠️ Installation & Setup
+## Installation & Setup
 
 ### 1. Clone & Install
 ```bash
@@ -50,7 +50,7 @@ Recommended kernels:
 
 ---
 
-## 📐 Mission Design Conventions
+## Mission Design Conventions
 
 All calculations follow strict astrodynamics standards:
 -   **Time System**: Barycentric Dynamical Time (TDB) / Ephemeris Time (ET).
@@ -60,7 +60,7 @@ All calculations follow strict astrodynamics standards:
 
 ---
 
-## 🔭 Examples
+## Examples
 
 The [examples/](examples/) directory contains demonstration scripts. Key highlights:
 
@@ -86,7 +86,7 @@ The [examples/](examples/) directory contains demonstration scripts. Key highlig
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 -   [ ] **Navigation & GNC**: Orbit Determination (EKF, Batch Least Squares), Covariance Analysis.
 -   [ ] **Multiple Flybys**: Generalized MGA (Multiple Gravity Assist) solver.
@@ -95,7 +95,7 @@ The [examples/](examples/) directory contains demonstration scripts. Key highlig
 
 ---
 
-## 📄 License
+## License
 
 MIT License. See [LICENSE](LICENSE) for details.
 
