@@ -1,10 +1,10 @@
-# 🚀 Astrodynamics Examples
+# Astrodynamics Examples
 
 This directory contains demonstration scripts showcasing the core capabilities of the **Deep Space Mission Design Toolkit**. These examples range from fundamental N-body propagation to advanced mission-specific trajectory design.
 
 ---
 
-## 📝 Detailed Script Descriptions
+## Detailed Script Descriptions
 
 ### 1. `nbody_demo.py`
 - **Workflow**: Solves Lambert -> Seeds N-Body -> Corrects initial $V_0$.
@@ -33,7 +33,7 @@ This directory contains demonstration scripts showcasing the core capabilities o
 
 ---
 
-## 🏃 How to Run
+## How to Run
 
 Generic execution from the repository root:
 
