@@ -98,3 +98,8 @@ The [examples/](examples/) directory contains demonstration scripts. Key highlig
 ## 📄 License
 
 MIT License. See [LICENSE](LICENSE) for details.
+
+## Author
+
+**Batuhan Akkova**
+[Email](mailto:batuhanakkova1@gmail.com)
