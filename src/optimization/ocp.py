@@ -78,7 +78,6 @@ class OptimalControlProblem:
         else:
             raise NotImplementedError(f"Constraint method {method} not supported.")
 
-
     def get_hamiltonian(self, costates: List[sp.Symbol]):
         """Constructs the Hamiltonian: H = L + lambda^T * f"""
         if len(costates) != len(self.dynamics):

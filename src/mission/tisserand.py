@@ -149,9 +149,8 @@ class TisserandGraph:
 
     def plot_graph(self, period_range: tuple, rp_range: tuple, 
                   v_inf_contours: dict = None,
-                  resonance_lines: dict = None, 
-                  filename: str = None,
-                  show: bool = True):
+                  resonance_lines: dict = None
+                  ):
         """
         Plot the Tisserand Graph.
         
@@ -161,9 +160,7 @@ class TisserandGraph:
             v_inf_contours (dict): definition of contours. {BodyName: [level1, level2, ...]}
             resonance_lines (dict): definition of resonances. {BodyName: [(num, den), ...]}
                                     e.g. {'EARTH': [(1,1), (2,3)]} means Earth 1:1 and 2:3.
-            filename (str): Output filename.
         """
-        
         # Create grid
         p_min, p_max = period_range
         rp_min, rp_max = rp_range
@@ -214,8 +211,7 @@ class TisserandGraph:
                     T_sc = (float(n) / float(m)) * T_pl
                     
                     if p_min <= T_sc <= p_max:
-                        # ax.hlines(y=T_sc, xmin=rp_min, xmax=rp_max, colors='gray', linestyles=':', alpha=0.5) 
-                        # Note: Y-axis is Radius, not Period. Resonance lines are constant Period, so they are vertical lines.
+                        ax.hlines(y=T_sc, xmin=rp_min, xmax=rp_max, colors='gray', linestyles=':', alpha=0.5) 
                         ax.vlines(x=T_sc, ymin=rp_min, ymax=rp_max, colors='gray', linestyles=':', alpha=0.5)
                         
                         # Label
@@ -234,17 +230,7 @@ class TisserandGraph:
         ax.set_ylim(rp_min, rp_max)
         
         plt.tight_layout()
-        
-        if filename:
-            plt.savefig(filename, dpi=300)
-            print(f"Saved Tisserand Graph to {filename}")
-            
-        if show:
-            plt.show() # Changed from close to show for interactive users, typically. Or keep close if strict file gen.
-            # actually for the demo we usually want to save.
-            # but returning ax allows further modification before saving if we move save out.
-            # For now, let's keep the save behavior but return ax.
-            pass
+        plt.show()
             
         return fig, ax
 

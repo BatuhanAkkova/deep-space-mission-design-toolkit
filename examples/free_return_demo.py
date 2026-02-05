@@ -10,7 +10,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.spice.manager import spice_manager
 from src.dynamics.nbody import NBodyDynamics
-from src.optimization.grid_search import grid_search_poincare
 
 class FreeReturnSolver:
     def __init__(self):
@@ -80,13 +79,9 @@ class FreeReturnSolver:
         # 1. Propagate for a fixed duration (e.g. 5 days to ensure we pass Moon)
         t_span = (self.et0, self.et0 + 5 * 86400)
         
-        # We don't use events here. We just want the trajectory.
         sol = self.nbody.propagate(y0, t_span, rtol=1e-6, atol=1e-6)
         
         # 2. Calculate Distance to Moon at every step
-        # Get Moon positions for all query times
-        # Note: Optimization bottleneck is here. Vectorized SPICE would be faster, 
-        # but for simple solves, a loop is fine or using coarse steps.
         
         min_dist = 1e9
         min_idx = -1
@@ -102,10 +97,7 @@ class FreeReturnSolver:
                 min_dist = dist
                 min_idx = i
                 
-        # 3. Refinement (Optional but recommended)
-        # We found the coarse minimum. Use optimization to find exact minimum time 
-        # in that neighborhood? For now, coarse is likely good enough for convergence 
-        # if steps are small. 
+        # 3. Refinement
         
         return min_dist, sol.t[min_idx]
 
@@ -150,11 +142,7 @@ class FreeReturnSolver:
             err_earth = abs(earth_dist - target_earth)
             
             # 4. Weighted Cost
-            # Hitting the Moon keyhole is harder/more sensitive, so we weight it slightly less 
-            # to prevent it from dominating? Actually, we want both.
-            # Usually: Cost = err_moon + err_earth
             
-            # PENALTY: If we are going too fast (V > 3.25), add penalty to discourage escape
             velocity_penalty = 0
             if x[1] > 3.25:
                 velocity_penalty = (x[1] - 3.25) * 1e6
@@ -182,12 +170,10 @@ class FreeReturnSolver:
         y0 = self.get_initial_state(theta, v_mag)
         
         # 1. Propagate for 10 days (enough for Earth->Moon->Earth)
-        # We need a longer duration to see the return leg
         t_span = (self.et0, self.et0 + 10 * 86400)
         sol = self.nbody.propagate(y0, t_span, rtol=1e-6, atol=1e-6)
         
         # 2. Find Moon Closest Approach (Perilune)
-        # Calculate distance to Moon for all points
         r_moon_all = np.array([spice_manager.get_body_state("MOON", "EARTH", t, "ECLIPJ2000")[:3] for t in sol.t]).T
         dists_moon = np.linalg.norm(sol.y[:3] - r_moon_all, axis=0)
         
@@ -195,11 +181,7 @@ class FreeReturnSolver:
         perilune_dist = dists_moon[perilune_idx]
         t_perilune = sol.t[perilune_idx]
         
-        # 3. Find Earth Return Perigee (ONLY looking at times AFTER Perilune)
-        # We look for the minimum distance to Earth, but only in the second half of the flight
-        
-        # Slice trajectory after the moon encounter
-        # (Add a buffer, e.g., 1 day after perilune)
+        # 3. Find Earth Return Perigee
         return_mask = sol.t > (t_perilune + 86400)
         
         if np.any(return_mask):
@@ -207,7 +189,6 @@ class FreeReturnSolver:
             dists_earth = np.linalg.norm(r_return_leg, axis=0)
             return_perigee = np.min(dists_earth)
         else:
-            # If we didn't fly long enough or crashed into moon, return huge penalty
             return_perigee = 1e6 # 1 million km (Failed return)
 
         return perilune_dist, return_perigee
@@ -218,11 +199,10 @@ class FreeReturnSolver:
         t_end = self.et0 + 10 * 86400
         sol = self.nbody.propagate(y0, (self.et0, t_end), rtol=1e-9)
         
-        # --- NEW: Cut off data after Earth Return ---
-        # Find index where altitude drops below 100km (AFTER the first day)
+        # Find index where altitude drops below 100km
         r_mag = np.linalg.norm(sol.y[:3], axis=0)
         
-        # Mask: True if we are close to Earth AND time > 1 day
+        # Mask: True if we are close to Earth and time > 1 day
         reentry_mask = (r_mag < (self.r_earth + 100)) & (sol.t > 86400)
         
         if np.any(reentry_mask):

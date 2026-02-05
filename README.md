@@ -3,20 +3,32 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
-A powerful, high-fidelity Python toolkit designed for the analysis and optimization of interplanetary trajectories. This repository provides a suite of tools for N-body propagation, differential correction, optimal control solving (indirect/direct methods), and preliminary mission planning.
+A high-fidelity Python toolkit for interplanetary trajectory analysis, optimization, and mission design. This repository provides advanced tools ranging from N-body propagation to symbolic optimal control solvers and global launch window scans.
 
 ---
 
 ## 🚀 Key Features
 
--   **High-Fidelity Dynamics**: Full N-body propagation using SPICE ephemeris data.
--   **Mission Design Tools**: Porkchop plot generation, Tisserand analysis, and Lambert solvers.
--   **Advanced Optimization**: 
-    -   **Indirect Methods**: Solving TPBVPs via Pontryagin's Minimum Principle with symbolic derivation.
-    -   **Homotopy/Continuation**: Robustly solving hard optimization problems (e.g., Min-Energy to Min-Fuel).
-    -   **Direct Methods**: Initial guess generation via grid search and single/multiple shooting.
--   **Targeting & Correction**: B-plane targeting for precise gravity assists and free-return trajectories.
--   **SPICE Integration**: Seamless handling of planetary constants and kernels via `SpiceManager`.
+### 🔭 High-Fidelity Dynamics
+-   **N-Body Propagator**: Full numerical integration using SPICE ephemeris data (Sun, Planets, Moon).
+-   **Perturbations**: Realistic force models including Solar Radiation Pressure (SRP), Atmospheric Drag, and J2 Zonal Harmonics.
+    -   *Note: J2 gravity requires SPICE kernels with specific body constants (e.g., `J2E` for Earth).*
+-   **Variational Equations**: Automatic State Transition Matrix (STM) propagation for navigation and optimization.
+
+### 🛠️ Mission Design & Targeting
+-   **B-Plane Targeting**: Precise targeting of gravity assist flyby parameters (B·R, B·T).
+-   **Lambert Solver**: Robust solution of the two-body boundary value problem (Gauss method).
+-   **Porkchop Plotter**: Global launch window analysis identifying C3 energy and Time-of-Flight (TOF) optima.
+-   **Tisserand Analysis**: Visualizing gravity assist opportunities and energy changes between bodies.
+
+### 📊 Advanced Optimization
+This toolkit provides multiple pathways for solving trajectory optimization problems:
+-   **Symbolic Indirect Methods**: Transform Optimal Control Problems (OCP) into TPBVPs via Pontryagin's Minimum Principle with automated symbolic derivation.
+-   **Numerical Shooting Methods**:
+    *   **Single Shooting**: Fast convergence for well-behaved boundary value problems.
+    *   **Multiple Shooting**: Robust solving of sensitive trajectories by breaking them into segments (purely numerical implementation).
+-   **Direct Collocation**: Solving OCPs via Hermite-Simpson discretization of the state and control paths.
+-   **Smoothing Homotopy**: Robustly transitioning from Minimum Energy to Minimum Fuel problems using continuation methods.
 
 ---
 
@@ -30,38 +42,36 @@ pip install -e .
 ```
 
 ### 2. SPICE Kernels
-This toolkit requires SPICE kernels for planetary ephemerides. Place your `.bsp`, `.tpc`, and `.tls` files in the `data/` directory. 
+This toolkit requires SPICE kernels. Place your `.bsp`, `.tpc`, and `.tls` files in the `data/` directory. 
 Recommended kernels:
 - `de440.bsp` (Planetary Ephemeris)
-- `naif0012.tls` (Leapseconds)
+- `naif0012.tls` (Leaperseconds)
 - `pck00010.tpc` (Planetary Constants)
 
 ---
 
-## 📏 Mission Design Conventions
+## 📐 Mission Design Conventions
 
-All calculations within this toolkit follow strict astrodynamics standards:
+All calculations follow strict astrodynamics standards:
 -   **Time System**: Barycentric Dynamical Time (TDB) / Ephemeris Time (ET).
 -   **Coordinate Frames**: `ECLIPJ2000` (Ecliptic) for interplanetary, `J2000` (Equatorial) for near-Earth.
 -   **Units**: SI-based with **Kilometers (km)** and **km/s** as standard for SPICE compatibility.
--   **Validation**: All patched-conic results are validated against full N-body numerical integration.
-
-*For more details, see [mission_design_conventions.md](mission_design_conventions.md).*
+-   **Assumptions**: Patched-conic results are routinely validated against full N-body numerical integration.
 
 ---
 
 ## 🔭 Examples
 
-The [examples/](examples/) directory contains a suite of demonstration scripts. Below is a gallery of key results:
+The [examples/](examples/) directory contains demonstration scripts. Key highlights:
 
 ### Trajectory Propagation & Targeting
-| Mission Analysis | Visualization |
+| Analysis | Visualization |
 | :--- | :--- |
-| **N-Body Propagation & Correction**<br>Demonstrates Lambert problem solving followed by differential correction in a full N-body environment. | ![N-Body Trajectory](assets/nbody.png) |
-| **B-Plane Flyby Targeting**<br>Precisely target specific B-plane coordinates (e.g., polar vs. equatorial flybys). | ![Flyby Correction](assets/flyby_correrct.png) |
-| **Free Return Trajectory (Figure-8)**<br>Earth-Moon-Earth free return optimized for specific perilune and reentry altitudes. | ![Free Return](assets/free_return.png) |
+| **N-Body Correction**<br>Lambert seed followed by high-fidelity differential correction. | ![N-Body](assets/nbody.png) |
+| **B-Plane Targeting**<br>Precisely hitting polar/equatorial aiming points at the Moon. | ![Flyby](assets/flyby_correrct.png) |
+| **Free Return (Fig-8)**<br>Earth-Moon-Earth trajectory optimized for reentry. | ![Free Return](assets/free_return.png) |
 
-### Advanced Optimization
+### Optimization & Planning
 | Method | Visualization |
 | :--- | :--- |
 | **Indirect Optimization**<br>Solving Optimal Control Problems (OCP) using Pontryagin's Minimum Principle. | ![Indirect Optimization](assets/indirect.png) |
@@ -72,21 +82,19 @@ The [examples/](examples/) directory contains a suite of demonstration scripts. 
 | :--- | :--- |
 | **Porkchop Plotter**<br>Global scan of launch windows identifying optimal C3 and TOF opportunities. | ![Porkchop Plot](assets/porkchop.png) |
 | **Tisserand Analysis**<br>Visualizing gravity assist opportunities and energy changes. | ![Tisserand](assets/tisserand.png) |
-
-*For detailed script descriptions, see the [Examples README](examples/README.md).*
+| **Poincare Map**<br>Analyzing stability and approach regions for complex trajectories (e.g., Earth-Moon). | ![Poincare Map](assets/poincare.png) |
 
 ---
 
 ## 🗺️ Roadmap
 
 -   [ ] **Navigation & GNC**: Orbit Determination (EKF, Batch Least Squares), Covariance Analysis.
--   [ ] **Multiple Flybys**: MGA (Multiple Gravity Assist) solver.
--   [ ] **Low Thrust**: Continuous thrust trajectory optimization.
--   [ ] **Invariant Manifolds**: Transfers between Lagrange points (L1/L2).
--   [ ] **Generalized Free Return**: Robust grid-search based free-return solver.
+-   [ ] **Multiple Flybys**: Generalized MGA (Multiple Gravity Assist) solver.
+-   [ ] **Low Thrust**: Continuous low-thrust trajectory optimization.
+-   [ ] **Invariant Manifolds**: Transfers using stable/unstable manifolds (CR3BP).
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details (or it's MIT by default for this toolkit).
+MIT License. See [LICENSE](LICENSE) for details.

@@ -1,7 +1,6 @@
 import numpy as np
 import sys
 import os
-from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.mission.porkchop import PorkchopPlotter
@@ -26,19 +25,18 @@ def main():
     # Launch: ~August 2005
     # Arrival: ~July 2006 (Mars Reconnaissance Orbiter timing)
     
-    launch_start_str = "2005-04-01"
-    launch_end_str   = "2005-11-01"
+    launch_start_str = "2005-04-01T12:00:00"
+    launch_end_str   = "2005-11-01T12:00:00"
     
-    arr_start_str    = "2005-12-01"
-    arr_end_str      = "2006-12-01"
-    
+    arr_start_str    = "2005-12-01T12:00:00"
+    arr_end_str      = "2006-12-01T12:00:00"
+
     # Convert to ET using SPICE
-    # (Note: str2et isn't directly exposed in manager wrapper, but we can assume J2000 offset or use datetime)
-    t_l_start = (datetime.strptime(launch_start_str, "%Y-%m-%d") - datetime(2000,1,1,12)).total_seconds()
-    t_l_end   = (datetime.strptime(launch_end_str, "%Y-%m-%d") - datetime(2000,1,1,12)).total_seconds()
+    t_l_start = spice_manager.utc2et(launch_start_str)
+    t_l_end   = spice_manager.utc2et(launch_end_str)
     
-    t_a_start = (datetime.strptime(arr_start_str, "%Y-%m-%d") - datetime(2000,1,1,12)).total_seconds()
-    t_a_end   = (datetime.strptime(arr_end_str, "%Y-%m-%d") - datetime(2000,1,1,12)).total_seconds()
+    t_a_start = spice_manager.utc2et(arr_start_str)
+    t_a_end   = spice_manager.utc2et(arr_end_str)
 
     # Grid Resolution
     n_pts_launch = 50 
@@ -52,7 +50,7 @@ def main():
     data = plotter.generate_data(launch_dates, arrival_dates)
     
     # 4. Plot
-    filename = "earth_mars_2005_porkchop.png"
+    filename = "porkchop.png"
     # Max C3 = 50, Max V_inf = 10 (km/s)
     plotter.plot(data, max_c3=30.0, max_vinf=7.0, filename=filename)
 

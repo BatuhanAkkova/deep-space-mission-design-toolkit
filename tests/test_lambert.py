@@ -65,9 +65,6 @@ def test_lambert_elliptical():
     v1, v2 = LambertSolver.solve(r1, r2, dt, mu, prograde=True)
     
     # Propagate to verify
-    # Using NBodyDynamics with only EARTH to simulate two-body motion
-    # We need to mock spice_manager.get_mu('EARTH') or similar if kernels aren't loaded,
-    # but since NBodyDynamics loads standard kernels, we should be fine if they exist.
     dyn = NBodyDynamics(bodies=['EARTH'], central_body='EARTH')
     
     # Override mu to be exactly what we used in Lambert for consistency

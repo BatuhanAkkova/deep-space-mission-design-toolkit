@@ -1,7 +1,6 @@
 import numpy as np
 from src.spice.manager import spice_manager
 from src.dynamics.nbody import NBodyDynamics
-from src.trajectory.maneuver import ImpulsiveManeuver
 
 def compute_turn_angle(v_inf_mag: float, mu: float, rp: float) -> float:
     """
@@ -421,9 +420,6 @@ class FlybyCorrector:
                 
             jt_inv = np.linalg.pinv(J)
             delta_v0 = -jt_inv @ b_err
-            
-            # Debug shapes if error expected
-            # print(f"DEBUG: J={J.shape}, J_inv={jt_inv.shape}, b_err={b_err.shape}, delta_v0={delta_v0.shape}")
             
             # Limit step size
             dv_mag = np.linalg.norm(delta_v0)

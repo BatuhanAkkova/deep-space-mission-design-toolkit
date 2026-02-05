@@ -33,8 +33,6 @@ def main():
     calculator = FlybyCalculator(body, frame=frame)
     
     # Define Incoming Conditions
-    # Assume we are coming from Mars to Earth Transfer? 
-    # Let's just pick a generic V_inf vector in Ecliptic frame.
     # V_inf = 5 km/s, confined mostly to Ecliptic (XY), slight inclination.
     v_inf_in = np.array([5.0, 2.0, 0.5]) 
     
@@ -74,11 +72,7 @@ def main():
 def plot_trajectory(results, body, epoch, frame='ECLIPJ2000'):
     sol_fwd = results['trajectory_fwd']
     sol_back = results['trajectory_back']
-    
-    # Get Planet Position over time (approximate centered for view)
-    # Actually, we propagated in Heliocentric frame.
-    # To see the flyby, we must plot in Planet-Centered Inertial frame.
-    
+        
     # Extract times
     times_fwd = sol_fwd.t
     times_back = sol_back.t
@@ -145,8 +139,6 @@ def plot_trajectory(results, body, epoch, frame='ECLIPJ2000'):
         pass
     
     plt.show()
-    #plt.savefig('flyby_trajectory.png')
-    #print("Trajectory verified and plotted to flyby_trajectory.png")
 
 if __name__ == "__main__":
     main()

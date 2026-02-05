@@ -1,16 +1,3 @@
-
-"""
-Poincare Map Generation for Earth-Moon Free Return Trajectories.
-
-This script demonstrates how to generate a 2D map of the solution space
-by varying:
-1. Launch Energy (represented by Delta-V magnitude at TLI)
-2. Launch Phase (represented by Departure Date/Time)
-
-The color of the map represents the closest approach distance to the Moon.
-This visualization helps identify "pockets" of feasible free return trajectories.
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import os 
@@ -55,15 +42,6 @@ def main():
     nbody = NBodyDynamics(bodies, frame='ECLIPJ2000', central_body='EARTH')
 
     # 2. Define Evaluation Function
-    # We want to vary: 
-    #   p1: Delta-V Magnitude (Energy)
-    #   p2: Time Shift (Phase) relative to nominal
-    
-    # Pre-calculate some geometry to handle the "direction" of TLI
-    # We assume TLI happens roughly at "perigee" of the transfer orbit
-    # The direction must be optimized or fixed. For this map, we fix the
-    # direction logic to be similar to a Hohmann transfer targeting the Moon's
-    # position at T_arrival.
     
     state_moon_nom = spice_manager.get_body_state("MOON", "EARTH", et_nom, "ECLIPJ2000")
     dist_moon_nom = np.linalg.norm(state_moon_nom[0:3])
@@ -104,37 +82,16 @@ def main():
         
         # Propagate
         y0 = np.concatenate((r0, v0))
-        t_events = []
-        
-        # Simple event for Moon closest approach check
-        def moon_prox(t, y):
-             # Stop if very close? No, let's just propagate fixed time and check min dist
-             # For speed, we just propagate 5 days
-             return 1.0
-             
-        # Just integrate dense output and find min dist post-processing for map stability
-        # Or use event to detect periapsis passage
-        
         t_span = (et0, et0 + 5.0 * 86400) # 5 days
         
-        # We need a robust metric. Let's use `check_moon_dist` event
-        # But for a map, just propagating and checking array is robust enough
         sol = nbody.propagate(y0, t_span, rtol=1e-5, atol=1e-8)
-        
-        # Calculate min distance to Moon over trajectory
         times = sol.t
         states = sol.y.T # (N, 6)
         
         # Vectorized Moon positions
         r_sc = states[:, 0:3]
         
-        # We can't vectorized SPICE call easily without wrapper, loop is okay for demo (grid size small)
-        # Actually, for 10x10 grid it is fine.
-        
         min_dist = 1e9
-        
-        # Check a few points? Or just finding the min numerically.
-        # Let's check the end point and intermediate points
         
         for k in range(0, len(times), 5): # skip steps for speed
             t_k = times[k]

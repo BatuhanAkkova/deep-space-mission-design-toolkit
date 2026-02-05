@@ -5,7 +5,6 @@ def grid_search_velocity_plane(objective_func, r0, v0_nom,
                              num_points=10, verbose=False):
     """
     Performs a 2D grid search on velocity magnitude and in-plane flight path angle.
-    
     This function explores a grid of possible initial velocities by varying the 
     magnitude and the direction within the orbital plane defined by (r0, v0_nom).
     

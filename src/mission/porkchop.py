@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from datetime import datetime, timedelta
 from src.spice.manager import spice_manager
 from src.trajectory.lambert import LambertSolver
 
@@ -147,8 +146,6 @@ class PorkchopPlotter:
         ax.clabel(cs, inline=1, fontsize=9, fmt=r'%1.1f')
         
         # 2. TOF Contours (Time of Flight) - Red Dashed/Solid Lines
-        # The user requested "red lines". I'll use solid or dashed red. 
-        # Typically TOF is dashed to distinguish from energy, but red color is the key.
         tof_min = np.nanmin(tof)
         tof_max = np.nanmax(tof)
         levels_tof = np.linspace(tof_min, tof_max, 15)

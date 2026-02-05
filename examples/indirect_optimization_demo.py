@@ -73,7 +73,6 @@ def run_earth_mars_transfer():
     x0 = np.array([r_earth, 0.0, 0.0, v_earth])
     
     # Target state: [r_mars, free_theta, 0.0, v_mars]
-    # We leave theta free (phasing is optimized) by setting it to NaN in the solver interface
     xf = np.array([r_mars, np.nan, 0.0, v_mars]) 
     
     # --- 5. Indirect Solution ---

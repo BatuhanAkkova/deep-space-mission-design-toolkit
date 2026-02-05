@@ -3,8 +3,6 @@ import numpy as np
 from unittest.mock import MagicMock, patch
 import sys
 import os
-
-# Ensure src is directly importable
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.dynamics.nbody import NBodyDynamics

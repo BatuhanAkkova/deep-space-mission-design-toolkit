@@ -64,7 +64,6 @@ class IndirectSolver:
                 print(f"Warning: Could not solve explicitly for control {u}. Stationarity: {stationarity}")
                 pass
 
-
         # 4. State Dynamics: x_dot = dH/dlambda
         
         # 5. Costate Dynamics: lambda_dot = -dH/dx

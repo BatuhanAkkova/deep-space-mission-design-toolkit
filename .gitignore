@@ -1,6 +1,4 @@
 .pytest_cache
 __pycache__
 data/
-.agent
-roadmap.md
-mission_design_conventions.md
+assets/

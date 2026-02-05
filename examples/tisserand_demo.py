@@ -56,12 +56,10 @@ def main():
     # Plot
     fig, ax = tg.plot_graph(p_range, rp_range, 
                   v_inf_contours=contours, 
-                  resonance_lines=resonances,
-                  filename=output_file,
-                  show=False)
+                  resonance_lines=resonances
+                  )
                   
     # Define a Mock Flyby Sequence (Earth -> Mars -> Jupiter)
-    # This represents a path through the Tisserand Graph
     # 1. Earth Departure (Rp=1.0 AU) -> Transfer Orbit 1 (P=1.4 yr, Rp=1.0 AU)
     # 2. Mars Flyby (Rp=1.52 AU) -> Transfer Orbit 2 (P=6.2 yr, Rp=1.52 AU)
     # 3. Jupiter Arrival

@@ -6,7 +6,6 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.optimization.ocp import OptimalControlProblem
 from src.optimization.indirect import IndirectSolver
-from src.optimization.homotopy import solve_minimum_fuel_with_homotopy
 
 def run_homotopy_demo():
     print("========================================")
@@ -51,7 +50,6 @@ def run_homotopy_demo():
     y_guess[3, :] = 0.1 # lam_v
     
     # 5. Run Homotopy
-    # p-schedule: Gentler descent to handle singular Jacobian at lambda=0
     p_schedule = [2.0, 1.8, 1.6, 1.4, 1.2]
     
     current_t = t_guess
@@ -63,13 +61,13 @@ def run_homotopy_demo():
     for val in p_schedule:
         print(f"\nOptimization Step: p = {val}")
         
-        # 1. Update Cost with CONCRETE values
+        # 1. Update Cost
         # L = (u**2)**(val/2) / val
         cost_expr = (u**2)**(val/2) / val
         ocp.set_running_cost(cost_expr)
         
         # 2. Manual Control Derivation (Real Solution)
-        # Init costates if needed (solver tracks them)
+        # Init costates if needed
         if not solver.costates:
             solver.costates = [sp.Function(f'lambda_{s.func.name}')(ocp.t) for s in ocp.states]
             
@@ -80,7 +78,7 @@ def run_homotopy_demo():
         
         solver.control_eqs = {u: u_real} # Force override
         
-        # 3. Derive (will use our u_real)
+        # 3. Derive (will use u_real)
         solver.derive_conditions()
         solver.lambdify_system()
         
@@ -102,7 +100,6 @@ def run_homotopy_demo():
             
     res = last_res # for plotting
 
-    
     if res and res.success:
         print("\nHomotopy Successful!")
         
@@ -133,7 +130,6 @@ def run_homotopy_demo():
         
         ax[2].set_title(f"Control Approximation (p={last_p})")
         # For p-norm, u = -sign(lam) * |lam|^(1/(p-1))
-        # Let's plot this analytical PMP control
         u_vals = -np.sign(lam_v) * np.abs(lam_v)**(1.0/(last_p - 1.0))
         ax[2].plot(t_sol, u_vals, label='u (derived)')
         ax[2].grid(True)
