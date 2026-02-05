@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deep-space-mission-design-toolkit"
+version = "0.1.0"
+authors = [
+  { name = "Batuhan Akkova" },
+]
+description = "A comprehensive toolkit for deep space mission design, trajectory optimization, and interplanetary analysis."
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.4.0",
+    "spiceypy>=5.0.0",
+    "sympy>=1.9",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/BatuhanAkkova/deep-space-mission-design-toolkit"
+"Bug Tracker" = "https://github.com/BatuhanAkkova/deep-space-mission-design-toolkit/issues"
+
+[tool.setuptools]
+packages = ["src", "src.dynamics", "src.mission", "src.optimization", "src.spice", "src.trajectory"]

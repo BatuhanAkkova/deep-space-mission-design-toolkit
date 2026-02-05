@@ -1,154 +1,94 @@
 import numpy as np
-import math
 from scipy.integrate import solve_ivp
+from src.optimization.grid_search import grid_search_velocity_plane
 
-class ShapeBasedGuesser:
+class InitialGuesser:
     """
-    Provides shape-based methods for initial trajectory guessing.
+    Refined initial guess generator using grid search and propagation.
     """
+    
     @staticmethod
-    def exponential_sinusoid(r0, r_f, t0, tf, n_points=100, k2=1.0, phi=0.0, rotations=0):
+    def propagate_and_resample(dynamics_func, x0, t_span, num_points=100, integrator_params=None):
         """
-        Generates an initial guess using the Exponential Sinusoid shape.
-        r = k0 * exp(k1 * sin(k2 * theta + phi))
+        Propagates a trajectory and resamples it to a fixed grid.
         
         Args:
-            r0: Initial radius (scalar).
-            r_f: Final radius (scalar).
-            t0: Initial time.
-            tf: Final time.
-            n_points: Number of points.
-            k2: Winding parameter (approx number of revs * 2pi).
-            phi: Phase angle.
-        
+            dynamics_func (callable): Function dynamics(t, y) returning dy/dt.
+            x0 (np.array): Initial state vector.
+            t_span (tuple): (t0, tf).
+            num_points (int): Number of points for the output grid.
+            integrator_params (dict): Optional parameters for solve_ivp (e.g. 'rtol', 'atol').
+            
         Returns:
-            t: Time grid.
-            x: State guess (cartesian [x, y, vx, vy]).
+            np.array: t_eval (time grid).
+            np.array: state_eval (interpolated state history, shape (num_points, state_dim)).
         """
-        # 1. Solve for k0, k1
+        if integrator_params is None:
+            # Default tight tolerances for decent precision
+            integrator_params = {'rtol': 1e-9, 'atol': 1e-9}
+            
+        t0, tf = t_span
+        t_eval = np.linspace(t0, tf, num_points)
         
-        theta_0 = 0.0
-        if rotations == 0:
-             theta_f = np.pi # Hohmann-like
-        else:
-             theta_f = 2 * np.pi * rotations
+        sol = solve_ivp(dynamics_func, t_span, x0, t_eval=t_eval, **integrator_params)
+        
+        if not sol.success:
+            print(f"Warning: Propagation failed: {sol.message}")
+            
+        return sol.t, sol.y.T
 
-        # k0 * exp(k1 * sin(k2*theta0 + phi)) = r0
-        # k0 * exp(k1 * sin(k2*thetaf + phi)) = rf
-        
-        # Log:
-        # ln(k0) + k1 * sin(phi) = ln(r0)
-        # ln(k0) + k1 * sin(k2*thetaf + phi) = ln(rf)
-        
-        s0 = math.sin(phi)
-        sf = math.sin(k2 * theta_f + phi)
-        
-        # If possible to solve
-        if abs(s0 - sf) > 1e-6:
-            k1 = (np.log(r_f) - np.log(r0)) / (sf - s0)
-            ln_k0 = np.log(r0) - k1 * s0
-            k0 = np.exp(ln_k0)
-        else:
-            # Fallback to linear spiral
-            k1 = 0
-            k0 = (r0 + r_f) / 2.0
-            
-        theta = np.linspace(theta_0, theta_f, n_points)
-        r = k0 * np.exp(k1 * np.sin(k2 * theta + phi))
-        
-        t = np.linspace(t0, tf, n_points)
-        
-        # Cartesian conversion (Planar)
-        X = r * np.cos(theta)
-        Y = r * np.sin(theta)
-        
-        # Velocities
-        # v ~ sqrt(mu/r)
-        mu = 1.0 # Canonical
-        v = np.sqrt(mu / r)
-        VX = -v * np.sin(theta)
-        VY = v * np.cos(theta)
-        
-        state = np.vstack((X, Y, np.zeros_like(X), VX, VY, np.zeros_like(X))).T # 3D state
-        
-        return t, state
-
-class QLawGuesser:
-    """
-    Q-Law Feedback Control Guesser.
-    """
-    def __init__(self, mu=1.0, max_thrust=0.1, isp=2000, g0=9.81):
-        self.mu = mu
-        self.T_max = max_thrust
-        self.Isp = isp
-        self.g0 = g0
-        self.c = isp * g0
-        
-    def q_law_control(self, oe, oe_target, weight=[1,1,1,1,1]):
+    @staticmethod
+    def find_guess_and_resample(objective_func, dynamics_func, r0, v0_nom, t_span, num_points=100, 
+                                mag_diff_pct=0.1, angle_diff_rad=0.2, grid_points=10):
         """
-        Computes Q-law control acceleration.
-        oe: [a, e, i, RAAN, argp]
+        Uses grid search to find the best initial velocity, then generates a full trajectory guess.
+        
+        Args:
+            objective_func (callable): Function(v_vec) -> cost. Used by grid search.
+            dynamics_func (callable): Function used for propagation.
+            r0 (np.array): Initial position.
+            v0_nom (np.array): Nominal initial velocity guess.
+            t_span (tuple): (t0, tf).
+            num_points (int): Number of points for the resampled trajectory.
+            mag_diff_pct (float): Grid search velocity magnitude range (fraction).
+            angle_diff_rad (float): Grid search angle range (radians).
+            grid_points (int): Resolution of the grid search (N x N).
+            
+        Returns:
+            dict: Dictionary containing:
+                - 't_eval': Time history.
+                - 'state_eval': State history.
+                - 'best_v': Optimized initial velocity.
+                - 'best_cost': Cost of the best solution.
+                - 'grid_results': Full output from grid_search_velocity_plane.
         """
-        # Placeholder for full Q-law logic.
-        # Returning a simplified "thrust in velocity direction" (tangential)
-        # modified by error in semi-major axis.
         
-        # Real Q-law requires sum of (Wi * dQ/dOE) ...
-        # For the purpose of initial guess for low-thrust, we often use
-        # simple Lyapunov: u = - sign( P^T * (OE - OE_target) )
+        # 1. Run Grid Search
+        print("Running grid search for initial guess...")
+        grid_res = grid_search_velocity_plane(
+            objective_func, 
+            r0, 
+            v0_nom, 
+            mag_diff_pct=mag_diff_pct, 
+            angle_diff_rad=angle_diff_rad, 
+            num_points=grid_points
+        )
         
-        # Returning [ur, ut, uh] (Radial, Tangential, Normal)
+        best_v = grid_res['best_v']
+        best_cost = grid_res['best_cost']
         
-        da = oe_target[0] - oe[0]
-        di = oe_target[2] - oe[2]
+        print(f"Grid search found best v: {best_v} with cost {best_cost:.4e}")
         
-        # If semi-major axis needs changing -> Tangential
-        # If inclination needs changing -> Normal
+        # 2. Propagate and Resample
+        x0 = np.concatenate((r0, best_v))
+        t_eval, state_eval = InitialGuesser.propagate_and_resample(
+            dynamics_func, x0, t_span, num_points=num_points
+        )
         
-        ur = 0.0
-        ut = 1.0 if da > 0 else -1.0
-        uh = 1.0 if di > 0 else -1.0
-        
-        # Normalize
-        u = np.array([ur, ut, uh])
-        norm = np.linalg.norm(u)
-        if norm > 1e-6:
-            u = u / norm
-            
-        return u
-
-    def generate_guess(self, r0, v0, oe_target, t_max):
-        """
-        Propagates under Q-Law control.
-        """
-        y0 = np.concatenate((r0, v0, [1.0])) # State + Mass
-        
-        def dynamics(t, y):
-            r = y[:3]
-            v = y[3:6]
-            m = y[6]
-            
-            r_norm = np.linalg.norm(r)
-            v_norm = np.linalg.norm(v)
-            
-            # Keplerian
-            acc_grav = -self.mu * r / r_norm**3
-            
-            # Control (convert Cartesian to OE first)
-            # For speed, we skip OE conversion in this placeholder and just allow
-            # Tangential thrust
-            
-            # Tangential direction
-            t_vec = v / v_norm
-            
-            acc_thrust = (self.T_max / m) * t_vec
-            
-            # Mass flow
-            dm = -self.T_max / self.c
-            
-            dydt = np.concatenate((v, acc_grav + acc_thrust, [dm]))
-            return dydt
-            
-        sol = solve_ivp(dynamics, (0, t_max), y0, rtol=1e-3, atol=1e-3)
-        
-        return sol.t, sol.y.T, np.zeros((len(sol.t), 3)) # Returns t, x, u=0 (placeholder)
+        return {
+            't_eval': t_eval,
+            'state_eval': state_eval,
+            'best_v': best_v,
+            'best_cost': best_cost,
+            'grid_results': grid_res
+        }

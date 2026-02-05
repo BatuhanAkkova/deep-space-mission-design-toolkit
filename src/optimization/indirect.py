@@ -30,22 +30,40 @@ class IndirectSolver:
         Symbolically derives the necessary conditions of optimality.
         """
         # 1. Define Costates (Lagrange Multipliers)
-        # Note: Costates are functions of time, same as states
-        self.costates = [sp.Function(f'lambda_{s.func.name}')(self.ocp.t) for s in self.ocp.states]
+        # Check if already defined (manual override support)
+        if not self.costates:
+            self.costates = [sp.Function(f'lambda_{s.func.name}')(self.ocp.t) for s in self.ocp.states]
         
         # 2. Form Hamiltonian
         self.H = self.ocp.get_hamiltonian(self.costates)
         
+        if self.ocp.objective_type == 'min_fuel_singular':
+             # Special handling for singular arcs if needed, or expected user to provide smoothed L
+             pass
+
         # 3. Stationarity Condition: dH/du = 0
         for u in self.ocp.controls:
+            # Check if user manually provided the control law
+            if u in self.control_eqs:
+                continue
+
             stationarity = sp.diff(self.H, u)
-            sol = sp.solve(stationarity, u)
+            
+            # Try to solve for u explicitly
+            try:
+                # Direct solve without simplify
+                sol = sp.solve(stationarity, u)
+            except Exception:
+                sol = []
+            
             if sol:
-                self.control_eqs[u] = sol[0]
+                # If multiple solutions, heuristic: take the real one or the first one
+                self.control_eqs[u] = sol[0] 
             else:
-                 raise NotImplementedError(f"Could not solve explicitly for control {u}. "
-                                           "Ensure the Hamiltonian is convex with respect to control, "
-                                           "or provide a custom formulation.")
+                # If explicit solution fails, check if the user provided a control law manually
+                print(f"Warning: Could not solve explicitly for control {u}. Stationarity: {stationarity}")
+                pass
+
 
         # 4. State Dynamics: x_dot = dH/dlambda
         
