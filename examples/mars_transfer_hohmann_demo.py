@@ -46,7 +46,6 @@ def mars_hohmann_demo():
     # 3. Realistic Lambert Solver Comparison
     # Pick a good window (roughly 2026 window)
     utc_dep = "2026-10-20T00:00:00"
-    # Hohmann takes ~259 days, let's try 210 days for a slightly faster path
     tof_actual_days = 210
     et_dep = spice_manager.utc2et(utc_dep)
     et_arr = et_dep + tof_actual_days * 86400
@@ -71,42 +70,25 @@ def mars_hohmann_demo():
     print(f"Total Lambert Delta-V: {dv_dep + dv_arr:.4f} km/s")
     
     # 4. Visualization
-    # Simple top-down plot of orbits
     theta = np.linspace(0, 2*np.pi, 200)
     plt.figure(figsize=(8, 8))
-    
-    # Plot Sun
     plt.plot(0, 0, 'yo', markersize=10, label='Sun')
-    
-    # Plot Circular Orbits for reference
     plt.plot(r_earth*np.cos(theta), r_earth*np.sin(theta), 'b--', alpha=0.3, label='Earth Orbit')
     plt.plot(r_mars*np.cos(theta), r_mars*np.sin(theta), 'r--', alpha=0.3, label='Mars Orbit')
     
-    # Plot Transfer
-    # We can propagate the transfer orbit for visualization
-    mu = mu_sun
-    v1 = v1_trans
-    h = np.cross(r1, v1)
-    energy = 0.5 * np.linalg.norm(v1)**2 - mu / np.linalg.norm(r1)
-    a = -mu / (2 * energy)
-    # Simplify: just plot the points for the transfer
-    # (In a real scenario we'd propagate N-Body or use Keplerian)
-    # For now, let's just show r1 and r2
     plt.plot(r1[0], r1[1], 'bo', label='Earth Departure')
     plt.plot(r2[0], r2[1], 'ro', label='Mars Arrival')
-    
-    # Crude transfer arc (straight line for now, or just markers)
-    plt.annotate('', xy=r2[:2], xytext=r1[:2], arrowprops=dict(arrowstyle="->", color='orange', lw=2, label='Transfer (approx)'))
+    plt.annotate('', xy=r2[:2], xytext=r1[:2], arrowprops=dict(arrowstyle="->", color='orange', lw=2))
     
     plt.axis('equal')
     plt.xlabel('X [km]')
     plt.ylabel('Y [km]')
-    plt.title('Earth to Mars Hohmann-ish Transfer')
+    plt.title('Earth to Mars Realistic Transfer')
     plt.legend()
     plt.grid(True, alpha=0.2)
     
-    plt.savefig('mars_hohmann_demo.png')
-    print("\nPlot saved to mars_hohmann_demo.png")
+    plt.savefig('assets/mars_hohmann_demo.png')
+    print("\nPlot saved to assets/mars_hohmann_demo.png")
 
 if __name__ == "__main__":
     mars_hohmann_demo()

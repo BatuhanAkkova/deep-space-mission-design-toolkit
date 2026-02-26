@@ -17,7 +17,6 @@ def earth_escape_demo():
     spice_manager.load_standard_kernels()
     
     # 2. Define Mission Epoch
-    # Assume departure on 2028-09-22
     utc_departure = "2028-09-22T12:00:00"
     et_dep = spice_manager.utc2et(utc_departure)
     
@@ -35,7 +34,6 @@ def earth_escape_demo():
     
     # 4. Define Departure Hyperbola
     # Suppose we want to leave Earth with a specific V_inf vector.
-    # For a Mars mission, we might need ~3 km/s excess velocity.
     v_inf_mag = 3.0 # km/s
     c3 = v_inf_mag**2
     
@@ -43,9 +41,6 @@ def earth_escape_demo():
     print(f"Departure C3: {c3:.2f} km^2/s^2")
     
     # 5. Calculate Perigee Velocity required for escape
-    # Energy: E = v^2/2 - mu/r = v_inf^2 / 2
-    # So v_perigee = sqrt(v_inf^2 + 2*mu/rp)
-    
     alt_p = 300.0 # km (Parking orbit altitude)
     rp = re + alt_p
     
@@ -60,11 +55,9 @@ def earth_escape_demo():
     
     # 6. Propagation Demonstration
     # Let's propagate the escape for 2 days to see the trajectory straighten out into the asymptote
-    # We'll put the spacecraft at perigee on the X-axis, moving in Y.
     state0 = np.array([rp, 0, 0, 0, v_p, 0])
     
     dyn = NBodyDynamics(bodies=['EARTH'], central_body='EARTH')
-    # Limit to Earth gravity for this local escape demo
     t_span = (0, 2 * 86400) # 2 days
     sol = dyn.propagate(state0, t_span, rtol=1e-10, atol=1e-12)
     
@@ -79,7 +72,6 @@ def earth_escape_demo():
     plt.subplot(1, 2, 1)
     plt.plot(sol.y[0], sol.y[1], 'b-', label='Hyperbolic Path')
     plt.plot(0, 0, 'go', label='Earth')
-    # Draw Earth to scale-ish
     theta = np.linspace(0, 2*np.pi, 100)
     plt.plot(re*np.cos(theta), re*np.sin(theta), 'g--', alpha=0.3)
     plt.axis('equal')
@@ -100,9 +92,8 @@ def earth_escape_demo():
     plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('earth_escape_demo.png')
-    print("\nPlot saved to earth_escape_demo.png")
-    # plt.show()
+    plt.savefig('assets/earth_escape_demo.png')
+    print("\nPlot saved to assets/earth_escape_demo.png")
 
 if __name__ == "__main__":
     earth_escape_demo()

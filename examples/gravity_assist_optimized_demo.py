@@ -18,38 +18,29 @@ def gravity_assist_optimization_demo():
     spice_manager.load_standard_kernels()
     
     # 2. Define Mission Window
-    # Launch from Earth towards the Moon
     utc_launch = "2025-06-15T10:00:00"
     et_launch = spice_manager.utc2et(utc_launch)
+    et_arrival = et_launch + 3.5 * 86400
     
-    # Estimate flight time to Moon (~3.5 days)
+    state_moon = spice_manager.get_body_state('MOON', 'EARTH', et_arrival, 'J2000')
+    mu_earth = spice_manager.get_mu('EARTH')
+    
     tof_days = 3.5
-    et_arrival = et_launch + tof_days * 86400
-    
     print(f"--- Moon Gravity Assist Targeter ---")
     print(f"Launch Epoch: {utc_launch}")
     
-    # 3. Initial Guess via Lambert (Two-body Earth-Moon)
-    state_earth = spice_manager.get_body_state('EARTH', 'EARTH', et_launch, 'J2000') # 0
-    state_moon = spice_manager.get_body_state('MOON', 'EARTH', et_arrival, 'J2000')
-    
+    # 3. Initial Guess via Lambert
     r1 = np.array([6700.0, 0, 0]) # Start from LEO
     r2 = state_moon[0:3]
-    mu_earth = spice_manager.get_mu('EARTH')
     
     v1_trans, _ = LambertSolver.solve(r1, r2, tof_days * 86400, mu_earth)
     state0 = np.concatenate((r1, v1_trans))
     
     # 4. Setup N-Body Model for Correction
-    # We want to hit a specific point in the Moon's B-plane
-    # target_br: distance from B-center in R direction
-    # target_bt: distance from B-center in T direction
-    # Aim for a 1000 km altitude polar flyby
     r_moon = 1737.4
     target_alt = 1000.0
     impact_param = r_moon + target_alt
     
-    # Polar flyby: B vector along R or T depending on frame
     target_br = impact_param
     target_bt = 0.0
     
@@ -66,39 +57,37 @@ def gravity_assist_optimization_demo():
     
     if success:
         print("Targeting SUCCESSFUL!")
-        # Verify result with final propagation
-        sol = nbody.propagate(corrected_state0, (et_launch, et_arrival + 86400), rtol=1e-9, atol=1e-11)
-        
-        # Calculate final B-plane at closest approach
-        # (This is a simplification, we find the min distance point first)
-        rel_pos = sol.y[0:3].T - np.array([spice_manager.get_body_state('MOON', 'EARTH', t, 'J2000')[0:3] for t in sol.t])
-        rel_dist = np.linalg.norm(rel_pos, axis=1)
-        min_idx = np.argmin(rel_dist)
-        t_ca = sol.t[min_idx]
-        
-        state_moon_ca = spice_manager.get_body_state('MOON', 'EARTH', t_ca, 'J2000')
-        rf_rel = sol.y[0:3, min_idx] - state_moon_ca[0:3]
-        vf_rel = sol.y[3:6, min_idx] - state_moon_ca[3:6]
-        
-        br_final, bt_final = state_to_bplane(rf_rel, vf_rel, spice_manager.get_mu('MOON'))
-        print(f"Final B-plane: BR={br_final:.2f} km, BT={bt_final:.2f} km")
-        print(f"Closest Approach Altitude: {rel_dist[min_idx] - r_moon:.2f} km")
-        
-        # 6. Visualization
-        plt.figure(figsize=(10, 6))
-        plt.plot(sol.y[0], sol.y[1], 'b-', label='Interplanetary Path')
-        # Plot Moon at CA
-        plt.plot(state_moon_ca[0], state_moon_ca[1], 'ko', label='Moon at CA')
-        plt.axis('equal')
-        plt.xlabel('X [km]')
-        plt.ylabel('Y [km]')
-        plt.title('Earth-Moon Targeted Flyby (N-Body)')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.savefig('gravity_assist_optimized_demo.png')
-        print("Plot saved to gravity_assist_optimized_demo.png")
     else:
-        print("Targeting FAILED to converge.")
+        print("Targeting FAILED to converge completely, but plotting best effort.")
+        
+    sol = nbody.propagate(corrected_state0, (et_launch, et_arrival + 86400), rtol=1e-9, atol=1e-11)
+    
+    # Calculate final B-plane at closest approach
+    rel_pos = sol.y[0:3].T - np.array([spice_manager.get_body_state('MOON', 'EARTH', t, 'J2000')[0:3] for t in sol.t])
+    rel_dist = np.linalg.norm(rel_pos, axis=1)
+    min_idx = np.argmin(rel_dist)
+    t_ca = sol.t[min_idx]
+    
+    state_moon_ca = spice_manager.get_body_state('MOON', 'EARTH', t_ca, 'J2000')
+    rf_rel = sol.y[0:3, min_idx] - state_moon_ca[0:3]
+    vf_rel = sol.y[3:6, min_idx] - state_moon_ca[3:6]
+    
+    br_final, bt_final = state_to_bplane(rf_rel, vf_rel, spice_manager.get_mu('MOON'))
+    print(f"Final B-plane: BR={br_final:.2f} km, BT={bt_final:.2f} km")
+    print(f"Closest Approach Altitude: {rel_dist[min_idx] - r_moon:.2f} km")
+    
+    # 6. Visualization
+    plt.figure(figsize=(10, 6))
+    plt.plot(sol.y[0], sol.y[1], 'b-', label='Interplanetary Path')
+    plt.plot(state_moon_ca[0], state_moon_ca[1], 'ko', label='Moon at CA')
+    plt.axis('equal')
+    plt.xlabel('X [km]')
+    plt.ylabel('Y [km]')
+    plt.title('Earth-Moon Targeted Flyby (N-Body)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.savefig('assets/gravity_assist_optimized_demo.png')
+    print("Plot saved to assets/gravity_assist_optimized_demo.png")
 
 if __name__ == "__main__":
     gravity_assist_optimization_demo()
