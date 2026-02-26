@@ -1,3 +1,10 @@
 .pytest_cache
 __pycache__
 data/
+# SPICE Kernels and data
+data/
+*.bsp
+*.tls
+*.tpc
+*.tf
+*.ker
