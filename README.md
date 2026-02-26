@@ -42,11 +42,17 @@ pip install -e .
 ```
 
 ### 2. SPICE Kernels
-This toolkit requires SPICE kernels. Place your `.bsp`, `.tpc`, and `.tls` files in the `data/` directory. 
-Recommended kernels:
+This toolkit requires SPICE kernels for high-fidelity planetary ephemeris. 
+
+> [!IMPORTANT]
+> You **must** create a `data/` directory in the repository root and place your `.bsp`, `.tpc`, and `.tls` files there. These files are not included in the repository due to size.
+
+**Required/Recommended kernels:**
 - `de440.bsp` (Planetary Ephemeris)
-- `naif0012.tls` (Leaperseconds)
+- `naif0012.tls` (Leapseconds)
 - `pck00010.tpc` (Planetary Constants)
+
+You can download these from the [NAIF Generic Kernels](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/) archive.
 
 ---
 
@@ -67,8 +73,9 @@ The [examples/](examples/) directory contains demonstration scripts. Key highlig
 ### Trajectory Propagation & Targeting
 | Analysis | Visualization |
 | :--- | :--- |
-| **N-Body Correction**<br>Lambert seed followed by high-fidelity differential correction. | ![N-Body](assets/nbody.png) |
-| **B-Plane Targeting**<br>Precisely hitting polar/equatorial aiming points at the Moon. | ![Flyby](assets/flyby_correrct.png) |
+| **Earth Escape**<br>Departure $C_3$, $V_\infty$ asymptote, and excess velocity. | ![Earth Escape](assets/earth_escape_demo.png) |
+| **Mars Hohmann**<br>Realistic vs. Analytic interplanetary transfer comparison. | ![Mars Hohmann](assets/mars_hohmann_demo.png) |
+| **B-Plane Targeting**<br>Precisely hitting polar/equatorial aiming points at the Moon. | ![Flyby](assets/gravity_assist_optimized_demo.png) |
 | **Free Return (Fig-8)**<br>Earth-Moon-Earth trajectory optimized for reentry. | ![Free Return](assets/free_return.png) |
 
 ### Optimization & Planning

@@ -4,6 +4,11 @@ from scipy.optimize import least_squares
 from typing import Callable, Optional, Union, List
 
 class SingleShootingSolver:
+    """
+    Solves Two-Point Boundary Value Problems (TPBVP) using the Single Shooting method.
+    This method interprets the BVP as a Root-Finding problem for the unknown 
+    initial states or parameters.
+    """
 
     def __init__(self, dynamics: Callable[[float, np.ndarray, Optional[np.ndarray]], np.ndarray]):
         """
@@ -153,6 +158,9 @@ class SingleShootingSolver:
         return Result(t_sol, Y_sol, p_sol if len(p_sol) > 0 else None, res.success, res.message, res.fun)
 
 class Result:
+    """
+    Data class for storing solver results.
+    """
     def __init__(self, t, y, p, success, message, fun=None):
         self.x = t
         self.y = y

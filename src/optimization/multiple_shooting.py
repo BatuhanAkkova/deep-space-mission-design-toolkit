@@ -4,6 +4,11 @@ from scipy.optimize import root
 from typing import Callable, List, Optional, Union
 
 class MultipleShootingSolver:
+    """
+    Solves Two-Point Boundary Value Problems (TPBVP) using the Multiple Shooting method.
+    This method breaks the trajectory into multiple segments and ensures continuity 
+    while satisfying boundary conditions.
+    """
 
     def __init__(self, dynamics: Callable[[float, np.ndarray, Optional[np.ndarray]], np.ndarray]):
         """
@@ -171,6 +176,9 @@ class MultipleShootingSolver:
         return Result(t_sol, Y_sol, p_sol, sol.success, sol.message, sol.fun)
 
 class Result:
+    """
+    Data class for storing solver results.
+    """
     def __init__(self, t, y, p, success, message, fun=None):
         self.x = t
         self.y = y
