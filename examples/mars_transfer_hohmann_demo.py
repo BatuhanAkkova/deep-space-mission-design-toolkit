@@ -52,8 +52,8 @@ def mars_hohmann_demo():
     
     print(f"\n--- Realistic Lambert Solver (Dep: {utc_dep}, TOF: {tof_actual_days}d) ---")
     
-    state_e = spice_manager.get_body_state('EARTH', 'SUN', et_dep, 'ECLIPJ2000')
-    state_m = spice_manager.get_body_state('MARS', 'SUN', et_arr, 'ECLIPJ2000')
+    state_e = spice_manager.get_body_state('EARTH BARYCENTER', 'SUN', et_dep, 'ECLIPJ2000')
+    state_m = spice_manager.get_body_state('MARS BARYCENTER', 'SUN', et_arr, 'ECLIPJ2000')
     
     r1 = state_e[0:3]
     v1_e = state_e[3:6]
@@ -70,15 +70,35 @@ def mars_hohmann_demo():
     print(f"Total Lambert Delta-V: {dv_dep + dv_arr:.4f} km/s")
     
     # 4. Visualization
-    theta = np.linspace(0, 2*np.pi, 200)
+    from scipy.integrate import solve_ivp
+    def two_body(t, y):
+        r = y[0:3]
+        v = y[3:6]
+        r_norm = np.linalg.norm(r)
+        a = -mu_sun * r / (r_norm**3)
+        return np.concatenate((v, a))
+
     plt.figure(figsize=(8, 8))
     plt.plot(0, 0, 'yo', markersize=10, label='Sun')
-    plt.plot(r_earth*np.cos(theta), r_earth*np.sin(theta), 'b--', alpha=0.3, label='Earth Orbit')
-    plt.plot(r_mars*np.cos(theta), r_mars*np.sin(theta), 'r--', alpha=0.3, label='Mars Orbit')
+    
+    # Plot Earth and Mars Orbits using 2-body propagation for 1 full period
+    t_earth = np.linspace(0, 365.25 * 86400, 200)
+    sol_earth = solve_ivp(two_body, [0, 365.25 * 86400], np.concatenate((r1, v1_e)), t_eval=t_earth, rtol=1e-8, atol=1e-8)
+    plt.plot(sol_earth.y[0], sol_earth.y[1], 'b--', alpha=0.3, label='Earth Orbit')
+    
+    t_mars = np.linspace(0, 687.0 * 86400, 200)
+    sol_mars = solve_ivp(two_body, [0, 687.0 * 86400], np.concatenate((r2, v2_m)), t_eval=t_mars, rtol=1e-8, atol=1e-8)
+    plt.plot(sol_mars.y[0], sol_mars.y[1], 'r--', alpha=0.3, label='Mars Orbit')
     
     plt.plot(r1[0], r1[1], 'bo', label='Earth Departure')
     plt.plot(r2[0], r2[1], 'ro', label='Mars Arrival')
-    plt.annotate('', xy=r2[:2], xytext=r1[:2], arrowprops=dict(arrowstyle="->", color='orange', lw=2))
+    
+    # Calculate and plot the actual transfer orbit using 2-body integration
+    state0 = np.concatenate((r1, v1_trans))
+    t_eval = np.linspace(0, tof_actual_days * 86400, 200)
+    sol = solve_ivp(two_body, [0, tof_actual_days * 86400], state0, t_eval=t_eval, rtol=1e-8, atol=1e-8)
+    
+    plt.plot(sol.y[0], sol.y[1], color='orange', lw=2, label='Transfer Orbit')
     
     plt.axis('equal')
     plt.xlabel('X [km]')

@@ -75,7 +75,7 @@ The [examples/](examples/) directory contains demonstration scripts. Key highlig
 | :--- | :--- |
 | **Earth Escape**<br>Departure $C_3$, $V_\infty$ asymptote, and excess velocity. | ![Earth Escape](assets/earth_escape_demo.png) |
 | **Mars Hohmann**<br>Realistic vs. Analytic interplanetary transfer comparison. | ![Mars Hohmann](assets/mars_hohmann_demo.png) |
-| **B-Plane Targeting**<br>Precisely hitting polar/equatorial aiming points at the Moon. | ![Flyby](assets/gravity_assist_optimized_demo.png) |
+| **B-Plane Targeting**<br>Precisely hitting polar/equatorial aiming points at the Moon. | ![Flyby](assets/flyby_correct.png) |
 | **Free Return (Fig-8)**<br>Earth-Moon-Earth trajectory optimized for reentry. | ![Free Return](assets/free_return.png) |
 
 ### Optimization & Planning
